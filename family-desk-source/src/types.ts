@@ -36,13 +36,15 @@ export interface CareNotes {
   notes: string | null;
 }
 
+export type EnrollmentStatus = "active" | "hold" | "dropped" | "waitlist";
 export interface Enrollment {
   id: string;
   child_id: string;
   program_id: string;
-  status: "active" | "hold" | "dropped" | "waitlist";
+  status: EnrollmentStatus;
   pay: "esa" | "card";
   start_date: string;
+  end_date?: string | null;
   program?: Program;
 }
 
@@ -61,12 +63,15 @@ export interface Child {
   enrollments?: Enrollment[];
 }
 
+export interface Agreement { id: string; kind: string; signed_at: string | null; signed_by: string | null }
+
 export interface Family {
   id: string;
   name: string;
   site_id: string;
   pay_method: PayMethod;
   stripe_customer_id: string | null;
+  address_line1?: string | null;
   city: string | null;
   zip: string | null;
   text_consent: boolean;
@@ -74,8 +79,16 @@ export interface Family {
   status: string;
   guardians?: Guardian[];
   children?: Child[];
-  agreements?: { id: string; kind: string; signed_at: string | null; signed_by: string | null }[];
+  agreements?: Agreement[];
 }
+
+// What the edit screens send. An id means update; none means create.
+export type FamilyInput = { id?: string; name: string; site_id: string; pay_method: PayMethod; address_line1: string | null; city: string | null; zip: string | null; text_consent: boolean; notes: string | null; status: string };
+export type GuardianInput = { id?: string; family_id: string; name: string; email: string | null; mobile: string | null; is_primary: boolean };
+export type ChildInput = { id?: string; family_id: string; first_name: string; last_name: string; birth_date: string; site_id: string; uniform_size: string | null; esa: boolean; house: string | null; active: boolean };
+export type CareInput = Omit<CareNotes, "child_id">;
+export type EnrollmentInput = { id?: string; child_id: string; program_id: string; status: EnrollmentStatus; pay: "esa" | "card"; start_date: string; end_date: string | null };
+export const AGREEMENT_KINDS = ["waiver", "photo_release", "policies"] as const;
 
 export interface EsaInvoice {
   id: string;

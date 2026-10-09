@@ -29,7 +29,7 @@ function child(id: string, family_id: string, first: string, last: string, birth
   };
 }
 
-const families: Family[] = [
+let families: Family[] = [
   { id: "fa", name: "Test Family A", site_id: "peoria", pay_method: "esa", stripe_customer_id: "cus_A", city: "Surprise", zip: "85379", text_consent: true, notes: "Practice family: ESA, one child, Tuesday co-op.", status: "active",
     guardians: [{ id: "ga", family_id: "fa", name: "Alex Anderson", email: "test.family.a@example.com", mobile: "(602) 555-0101", is_primary: true }],
     children: [child("ca1", "fa", "Avery", "Anderson", "2018-03-14", "peoria", "YM", true, "Lion", { emergency_contacts: [{ name: "Grandma Anderson", phone: "(602) 555-0201" }], authorized_pickups: ["Alex Anderson", "Grandma Anderson"] }, [["coop-peoria-tue", "esa", "active"]])],
@@ -62,7 +62,7 @@ const families: Family[] = [
     agreements: [{ id: "16", kind: "waiver", signed_at: "2026-09-18", signed_by: "Frankie Fox" }, { id: "17", kind: "photo_release", signed_at: "2026-09-18", signed_by: "Frankie Fox" }, { id: "18", kind: "policies", signed_at: "2026-09-18", signed_by: "Frankie Fox" }] },
 ];
 
-const allChildren = families.flatMap((f) => f.children ?? []);
+const allChildren = () => families.flatMap((f) => f.children ?? []);
 const esa: EsaInvoice[] = [
   { id: "ia", child_id: "ca1", class_month: "2026-12-01", amount_cents: 25000, stripe_invoice_id: "in_A", hosted_invoice_url: "https://invoice.stripe.com/", status: "sent", sent_at: "2026-10-03", paid_at: null, notes: null, child: { first_name: "Avery", last_name: "Anderson", family_id: "fa", site_id: "peoria", family: { name: "Test Family A" } } },
   { id: "id", child_id: "cd1", class_month: "2026-12-01", amount_cents: 25000, stripe_invoice_id: "in_D", hosted_invoice_url: "https://invoice.stripe.com/", status: "paid", sent_at: "2026-10-03", paid_at: "2026-10-07", notes: null, child: { first_name: "Drew", last_name: "Dawson", family_id: "fd", site_id: "peoria", family: { name: "Test Family D" } } },
@@ -90,9 +90,54 @@ export function mockApi(): Api {
     async rosterFor(weekday) {
       return programs.filter((p) => p.weekday === weekday).map((program) => ({
         program,
-        rows: allChildren.flatMap((c) => (c.enrollments ?? []).filter((e) => e.program_id === program.id && e.status === "active").map((enrollment): RosterRow => ({ child: c, enrollment }))).sort((a, b) => a.child.birth_date.localeCompare(b.child.birth_date)),
+        rows: allChildren().flatMap((c) => (c.enrollments ?? []).filter((e) => e.program_id === program.id && e.status === "active").map((enrollment): RosterRow => ({ child: c, enrollment }))).sort((a, b) => a.child.birth_date.localeCompare(b.child.birth_date)),
       }));
     },
+    async saveFamily(f) {
+      await sleep(80);
+      if (f.id) { families = families.map((x) => (x.id === f.id ? { ...x, ...f } : x)); return f.id; }
+      const id = "f" + Date.now();
+      families = [...families, { ...f, id, stripe_customer_id: null, guardians: [], children: [], agreements: [{ id: id + "a1", kind: "waiver", signed_at: null, signed_by: null }, { id: id + "a2", kind: "photo_release", signed_at: null, signed_by: null }, { id: id + "a3", kind: "policies", signed_at: null, signed_by: null }] }];
+      return id;
+    },
+    async saveGuardian(g) {
+      await sleep(60);
+      families = families.map((f) => {
+        if (f.id !== g.family_id) return f;
+        let gs = (f.guardians ?? []).map((x) => (g.is_primary ? { ...x, is_primary: false } : x));
+        if (g.id) gs = gs.map((x) => (x.id === g.id ? { ...x, ...g, id: g.id! } : x));
+        else gs = [...gs, { ...g, id: "g" + Date.now() }];
+        return { ...f, guardians: gs };
+      });
+    },
+    async removeGuardian(id) { families = families.map((f) => ({ ...f, guardians: (f.guardians ?? []).filter((g) => g.id !== id) })); },
+    async saveChild(c) {
+      await sleep(60);
+      const id = c.id ?? "c" + Date.now();
+      families = families.map((f) => {
+        if (f.id !== c.family_id) return f;
+        const kids = f.children ?? [];
+        return { ...f, children: c.id ? kids.map((k) => (k.id === c.id ? { ...k, ...c, id } : k)) : [...kids, { ...c, id, care: { child_id: id, allergies: null, medications: null, emergency_contacts: [], authorized_pickups: [], notes: null }, enrollments: [] }] };
+      });
+      return id;
+    },
+    async saveCare(childId, care) {
+      families = families.map((f) => ({ ...f, children: (f.children ?? []).map((k) => (k.id === childId ? { ...k, care: { child_id: childId, ...care } } : k)) }));
+    },
+    async setAgreement(familyId, kind, signedBy) {
+      families = families.map((f) => (f.id !== familyId ? f : { ...f, agreements: (f.agreements ?? []).map((a) => (a.kind === kind ? { ...a, signed_at: signedBy ? new Date().toISOString() : null, signed_by: signedBy } : a)) }));
+    },
+    async saveEnrollment(e) {
+      await sleep(60);
+      families = families.map((f) => ({ ...f, children: (f.children ?? []).map((k) => {
+        if (k.id !== e.child_id) return k;
+        const list = k.enrollments ?? [];
+        const existing = list.find((x) => (e.id ? x.id === e.id : x.program_id === e.program_id));
+        const row: Enrollment = { ...(existing ?? { id: "e" + Date.now() }), ...e, id: existing?.id ?? "e" + Date.now(), program: P[e.program_id] };
+        return { ...k, enrollments: existing ? list.map((x) => (x.id === row.id ? row : x)) : [...list, row] };
+      }) }));
+    },
+    async removeEnrollment(id) { families = families.map((f) => ({ ...f, children: (f.children ?? []).map((k) => ({ ...k, enrollments: (k.enrollments ?? []).filter((x) => x.id !== id) })) })); },
     async closures() {
       return [
         { id: "c1", site_id: "peoria", on_date: "2026-10-30", title: "Oasis camp day: no Peoria co-op", note: "Oasis reserved the gym." },

@@ -1,5 +1,5 @@
 // One data layer with two backs: Supabase for real use, built-in made-up data when VITE_MOCK=1.
-import type { Child, Closure, EsaInvoice, Family, Program, Profile, RosterRow, Site, Staff, StripePicture } from "../types";
+import type { CareInput, Child, ChildInput, Closure, EnrollmentInput, EsaInvoice, Family, FamilyInput, GuardianInput, Program, Profile, RosterRow, Site, Staff, StripePicture } from "../types";
 
 export interface Api {
   mock: boolean;
@@ -9,6 +9,14 @@ export interface Api {
   families(): Promise<Family[]>;
   family(id: string): Promise<Family | null>;
   rosterFor(weekday: number): Promise<{ program: Program; rows: RosterRow[] }[]>;
+  saveFamily(f: FamilyInput): Promise<string>;
+  saveGuardian(g: GuardianInput): Promise<void>;
+  removeGuardian(id: string): Promise<void>;
+  saveChild(c: ChildInput): Promise<string>;
+  saveCare(childId: string, care: CareInput): Promise<void>;
+  setAgreement(familyId: string, kind: string, signedBy: string | null): Promise<void>;
+  saveEnrollment(e: EnrollmentInput): Promise<void>;
+  removeEnrollment(id: string): Promise<void>;
   closures(fromIso: string): Promise<Closure[]>;
   esaInvoices(): Promise<EsaInvoice[]>;
   stripeFamily(familyId: string): Promise<StripePicture>;

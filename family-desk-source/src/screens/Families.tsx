@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
-import type { Family } from "../types";
+import type { Family, Site, Staff } from "../types";
 import { Band, ErrorBox, Loading, Tag } from "../ui";
 import { href } from "../router";
 import { siteName } from "../lib/util";
+import { FamilyDialog } from "./FamilyEdit";
 
 const PAY: Record<Family["pay_method"], [string, "esa" | "gold" | undefined]> = { esa: ["ESA", "esa"], private: ["Card or bank", undefined], split: ["ESA and card", "gold"] };
 
-export function Families() {
+export function Families({ staff }: { staff: Staff }) {
   const [fams, setFams] = useState<Family[] | null>(null);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [adding, setAdding] = useState(false);
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const canAdd = staff.role === "owner" || staff.role === "admin";
 
   useEffect(() => { api().then((a) => a.families()).then(setFams).catch((e) => setError(e.message)); }, []);
+  useEffect(() => { if (canAdd) api().then((a) => a.sites()).then(setSites).catch(() => {}); }, [canAdd]);
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -25,7 +30,11 @@ export function Families() {
 
   return (
     <>
-      <Band><h1>Families</h1><p className="lede">Type any parent or child name. Everything about the family is one tap away.</p></Band>
+      <Band>
+        <h1>Families</h1>
+        <p className="lede">Type any parent or child name. Everything about the family is one tap away.</p>
+        {canAdd && <div className="row" style={{ marginTop: 6 }}><button className="btn" onClick={() => setAdding(true)}>Add a family</button></div>}
+      </Band>
       <div className="page">
         <div className="section">
           <label htmlFor="search" className="hint">Search families and children</label>
@@ -48,11 +57,12 @@ export function Families() {
                   </li>
                 );
               })}
-              {rows.length === 0 && <li className="empty">No family or child matches "{q}". Check the spelling, or search by a parent's name.</li>}
+              {rows.length === 0 && <li className="empty">{fams.length === 0 ? "No families yet." : `No family or child matches "${q}". Check the spelling, or search by a parent's name.`}</li>}
             </ul>
           )}
         </div>
       </div>
+      {canAdd && <FamilyDialog open={adding} onClose={() => setAdding(false)} sites={sites} lockSite={staff.site_id} onSaved={(id) => { location.hash = href.family(id); }} />}
     </>
   );
 }

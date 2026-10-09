@@ -136,6 +136,13 @@ main{min-width:0}
 .field input,.field select,.field textarea{width:100%;min-height:44px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);padding:8px 12px}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--primary);outline:none;box-shadow:0 0 0 3px var(--primary-soft)}
 .field textarea{min-height:90px;resize:vertical}
+.chk{display:flex;align-items:center;gap:10px;margin:4px 0 12px;cursor:pointer}
+.chk input{width:22px;height:22px;accent-color:var(--primary)}
+.linkbtn{background:none;border:0;color:var(--primary);font-weight:700;cursor:pointer;padding:0 6px;font-size:.9rem;text-decoration:underline}
+.btn.danger{color:var(--red-text);border-color:var(--red-soft)}
+.btn.danger:hover{border-color:var(--red)}
+.kid.off{opacity:.65}
+.kid .nm .tag{margin-left:8px;vertical-align:middle;font-size:.75rem}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 14px}
 .checks label{display:flex;gap:8px;align-items:center;font-size:.95rem}

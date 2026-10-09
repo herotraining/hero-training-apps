@@ -32,7 +32,7 @@ function Screens({ signOut }: { signOut: () => void }) {
   const staff = profile.staff;
   const canMoney = staff.role === "owner" || staff.role === "admin";
   let screen;
-  if (route.name === "families" && staff.role !== "coach") screen = <Families />;
+  if (route.name === "families" && staff.role !== "coach") screen = <Families staff={staff} />;
   else if (route.name === "family" && staff.role !== "coach") screen = <Family id={route.id} staff={staff} />;
   else if (route.name === "money" && canMoney) screen = <Money />;
   else if (route.name === "staff" && staff.role === "owner") screen = <StaffScreen />;

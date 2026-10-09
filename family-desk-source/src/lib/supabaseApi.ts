@@ -1,6 +1,6 @@
 import type { Api } from "./api";
 import { supabase, functionsUrl } from "./supabase";
-import type { Family, Program, RosterRow } from "../types";
+import { AGREEMENT_KINDS, type Family, type Program, type RosterRow } from "../types";
 
 async function callFunction<T>(name: string, body: unknown): Promise<T> {
   const sb = supabase();
@@ -20,11 +20,11 @@ async function callFunction<T>(name: string, body: unknown): Promise<T> {
   return json as T;
 }
 
-const FAMILY_SELECT = `id, name, site_id, pay_method, stripe_customer_id, city, zip, text_consent, notes, status,
+const FAMILY_SELECT = `id, name, site_id, pay_method, stripe_customer_id, address_line1, city, zip, text_consent, notes, status,
   guardians(id, family_id, name, email, mobile, is_primary),
   children(id, family_id, first_name, last_name, birth_date, site_id, uniform_size, esa, house, active,
     care:care_notes(child_id, allergies, medications, emergency_contacts, authorized_pickups, notes),
-    enrollments(id, child_id, program_id, status, pay, start_date, program:programs(id, name, kind, site_id, weekday, start_time, end_time, monthly_price_cents))),
+    enrollments(id, child_id, program_id, status, pay, start_date, end_date, program:programs(id, name, kind, site_id, weekday, start_time, end_time, monthly_price_cents))),
   agreements(id, kind, signed_at, signed_by)`;
 
 function shapeFamily(f: any): Family {
@@ -76,6 +76,54 @@ export function supabaseApi(): Api {
           .sort((a: RosterRow, b: RosterRow) => a.child.birth_date.localeCompare(b.child.birth_date)),
       }));
     },
+    async saveFamily(f) {
+      const { id, ...rest } = f;
+      if (id) { const { error } = await sb.from("families").update(rest).eq("id", id); fail(error); return id; }
+      const { data, error } = await sb.from("families").insert(rest).select("id").single();
+      fail(error);
+      const fid = data!.id as string;
+      const { error: e2 } = await sb.from("agreements").insert(AGREEMENT_KINDS.map((kind) => ({ family_id: fid, kind })));
+      fail(e2);
+      return fid;
+    },
+    async saveGuardian(g) {
+      const { id, ...rest } = g;
+      if (rest.is_primary) { const { error } = await sb.from("guardians").update({ is_primary: false }).eq("family_id", rest.family_id); fail(error); }
+      const { error } = id ? await sb.from("guardians").update(rest).eq("id", id) : await sb.from("guardians").insert(rest);
+      fail(error);
+    },
+    async removeGuardian(id) { const { error } = await sb.from("guardians").delete().eq("id", id); fail(error); },
+    async saveChild(c) {
+      const { id, ...rest } = c;
+      if (id) { const { error } = await sb.from("children").update(rest).eq("id", id); fail(error); return id; }
+      const { data, error } = await sb.from("children").insert(rest).select("id").single();
+      fail(error);
+      const cid = data!.id as string;
+      const { error: e2 } = await sb.from("care_notes").insert({ child_id: cid });
+      fail(e2);
+      return cid;
+    },
+    async saveCare(childId, care) {
+      const { error } = await sb.from("care_notes").upsert({ child_id: childId, ...care }, { onConflict: "child_id" });
+      fail(error);
+    },
+    async setAgreement(familyId, kind, signedBy) {
+      const patch = signedBy ? { signed_at: new Date().toISOString(), signed_by: signedBy } : { signed_at: null, signed_by: null };
+      const { data, error } = await sb.from("agreements").select("id").eq("family_id", familyId).eq("kind", kind).limit(1);
+      fail(error);
+      if (data?.length) { const { error: e2 } = await sb.from("agreements").update(patch).eq("id", data[0].id); fail(e2); }
+      else { const { error: e2 } = await sb.from("agreements").insert({ family_id: familyId, kind, ...patch }); fail(e2); }
+    },
+    async saveEnrollment(e) {
+      const { id, ...rest } = e;
+      if (id) { const { error } = await sb.from("enrollments").update(rest).eq("id", id); fail(error); return; }
+      // A child can hold one row per program; re-enrolling after a drop reuses it.
+      const { data, error } = await sb.from("enrollments").select("id").eq("child_id", rest.child_id).eq("program_id", rest.program_id).limit(1);
+      fail(error);
+      if (data?.length) { const { error: e2 } = await sb.from("enrollments").update(rest).eq("id", data[0].id); fail(e2); }
+      else { const { error: e2 } = await sb.from("enrollments").insert(rest); fail(e2); }
+    },
+    async removeEnrollment(id) { const { error } = await sb.from("enrollments").delete().eq("id", id); fail(error); },
     async closures(fromIso) {
       const { data, error } = await sb.from("closures").select("*").gte("on_date", fromIso).order("on_date").limit(20);
       fail(error);

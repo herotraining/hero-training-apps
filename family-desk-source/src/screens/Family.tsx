@@ -96,7 +96,8 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
           {others.length ? ` · also ${others.map((g) => g.name).join(", ")}` : ""}
         </p>
         <div className="row"><Tag kind={fam.pay_method === "esa" ? "esa" : fam.pay_method === "split" ? "gold" : undefined}>{PAYWORDS[fam.pay_method]}</Tag><span className="contact">{siteName(fam.site_id)}{fam.city && fam.city.toLowerCase() !== siteName(fam.site_id).toLowerCase() ? `, lives in ${fam.city}` : ""}{fam.text_consent ? " · okay to text" : " · no texts"}</span></div>
-        {canEdit && <div className="row" style={{ marginTop: 6 }}><button className="btn quiet small" onClick={() => setOpen({ kind: "family" })}>Edit family</button><button className="btn quiet small" onClick={() => setOpen({ kind: "child", child: null })}>Add a child</button></div>}
+        {canEdit && <div className="row" style={{ marginTop: 6 }}><button className="btn quiet small" onClick={() => setOpen({ kind: "family" })}>{fam.status === "left" ? "Edit family / welcome back" : "Edit family"}</button><button className="btn quiet small" onClick={() => setOpen({ kind: "child", child: null })}>Add a child</button></div>}
+        {fam.status === "left" && <p className="contact" style={{ marginTop: 8 }}>Returning? Set the status to Active under Edit family, then tick each child's "Still at HERO" and enroll them.</p>}
       </Band>
       <div className="page">
         <ErrorBox error={error} />

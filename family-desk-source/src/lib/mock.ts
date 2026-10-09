@@ -59,6 +59,10 @@ let families: Family[] = [
     guardians: [{ id: "ge", family_id: "fe", name: "Emerson Ellis", email: "test.family.e@example.com", mobile: "(480) 555-0105", is_primary: true }],
     children: [child("ce1", "fe", "Emery", "Ellis", "2019-08-08", "mesa", "YM", true, "Lion", { emergency_contacts: [{ name: "Emerson Ellis", phone: "(480) 555-0105" }], authorized_pickups: ["Emerson Ellis"] }, [["coop-mesa-wed", "esa", "active"]])],
     agreements: [{ id: "13", kind: "waiver", signed_at: "2026-09-18", signed_by: "Emerson Ellis" }, { id: "14", kind: "photo_release", signed_at: "2026-09-18", signed_by: "Emerson Ellis" }, { id: "15", kind: "policies", signed_at: "2026-09-18", signed_by: "Emerson Ellis" }] },
+  { id: "fg", name: "Test Family G", site_id: "peoria", pay_method: "private", stripe_customer_id: null, city: null, zip: null, text_consent: false, notes: "Left HERO; inactive in Jackrabbit on Oct 9, 2026.", status: "left",
+    guardians: [{ id: "gg", family_id: "fg", name: "Gale Gordon", email: "test.family.g@example.com", mobile: "(602) 555-0107", is_primary: true }],
+    children: [{ id: "cg1", family_id: "fg", first_name: "Gray", last_name: "Gordon", birth_date: "2016-09-09", site_id: "peoria", uniform_size: null, esa: false, house: null, active: false, care: { child_id: "cg1", allergies: null, medications: null, emergency_contacts: [], authorized_pickups: [], notes: null }, enrollments: [] }],
+    agreements: [] },
   { id: "ff", name: "DEV Family F", site_id: "peoria", pay_method: "private", stripe_customer_id: null, city: "Glendale", zip: "85308", text_consent: true, notes: "Development family. Safe to change or delete.", status: "active",
     guardians: [{ id: "gf", family_id: "ff", name: "Frankie Fox", email: "dev.family.f@example.com", mobile: "(623) 555-0106", is_primary: true }],
     children: [

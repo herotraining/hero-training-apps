@@ -14,6 +14,7 @@ export function Families({ staff }: { staff: Staff }) {
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState("");
   const [site, setSite] = useState<string>("");
+  const [showLeft, setShowLeft] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canAdd = staff.role === "owner" || staff.role === "admin";
 
@@ -25,12 +26,15 @@ export function Families({ staff }: { staff: Staff }) {
     const digits = s.replace(/\D/g, "");
     return (fams ?? []).filter((f) => {
       if (site && f.site_id !== site) return false;
+      // Families who left stay out of the way unless asked for, or unless a search names them.
+      if (f.status === "left" && !showLeft && !s) return false;
       if (!s) return true;
       const hay = [f.name, ...(f.guardians ?? []).flatMap((g) => [g.name, g.email ?? ""]), ...(f.children ?? []).map((c) => `${c.first_name} ${c.last_name}`)].join(" ").toLowerCase();
       if (hay.includes(s)) return true;
       return digits.length >= 4 && (f.guardians ?? []).some((g) => (g.mobile ?? "").replace(/\D/g, "").includes(digits));
     });
-  }, [fams, q, site]);
+  }, [fams, q, site, showLeft]);
+  const leftCount = useMemo(() => (fams ?? []).filter((f) => f.status === "left").length, [fams]);
   const siteIds = useMemo(() => [...new Set((fams ?? []).map((f) => f.site_id))].sort(), [fams]);
 
   return (
@@ -48,6 +52,7 @@ export function Families({ staff }: { staff: Staff }) {
             <div className="chips" role="group" aria-label="Site">
               <button className="chipbtn" aria-pressed={site === ""} onClick={() => setSite("")}>All sites</button>
               {siteIds.map((id) => <button key={id} className="chipbtn" aria-pressed={site === id} onClick={() => setSite(id)}>{siteName(id)}</button>)}
+              {leftCount > 0 && <button className="chipbtn" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>Left HERO ({leftCount})</button>}
               <span className="hint" style={{ alignSelf: "center" }}>{rows.length} {rows.length === 1 ? "family" : "families"}</span>
             </div>
           )}
@@ -57,19 +62,19 @@ export function Families({ staff }: { staff: Staff }) {
             <ul className="list" style={{ marginTop: 14 }}>
               {rows.map((f) => {
                 const [label, kind] = PAY[f.pay_method];
-                const kids = (f.children ?? []).filter((c) => c.active).map((c) => c.first_name);
+                const kids = (f.children ?? []).filter((c) => c.active || f.status === "left").map((c) => c.first_name);
                 const waits = (f.children ?? []).some((c) => (c.enrollments ?? []).some((e) => e.status === "waitlist"));
                 return (
                   <li key={f.id}>
                     <a className="item" href={href.family(f.id)}>
                       <span className="n">{f.name}</span>
                       <span className="k">{kids.length ? kids.join(" and ") : "No children yet"} · {siteName(f.site_id)}</span>
-                      <span className="p">{waits && <Tag>Waitlist</Tag>}<Tag kind={kind}>{label}</Tag></span>
+                      <span className="p">{f.status === "left" ? <Tag kind="warn">Left</Tag> : <>{waits && <Tag>Waitlist</Tag>}<Tag kind={kind}>{label}</Tag></>}</span>
                     </a>
                   </li>
                 );
               })}
-              {rows.length === 0 && <li className="empty">{fams.length === 0 ? "No families yet." : `No family or child matches "${q}". Check the spelling, or search by a parent's name.`}</li>}
+              {rows.length === 0 && <li className="empty">{fams.length === 0 ? "No families yet." : q ? `No family or child matches "${q}". Check the spelling, or search by a parent's name.` : "No active families here. Tap Left HERO to see families who left."}</li>}
             </ul>
           )}
         </div>

@@ -13,6 +13,7 @@ export function Families({ staff }: { staff: Staff }) {
   const [sites, setSites] = useState<Site[]>([]);
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState("");
+  const [site, setSite] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const canAdd = staff.role === "owner" || staff.role === "admin";
 
@@ -21,12 +22,16 @@ export function Families({ staff }: { staff: Staff }) {
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
+    const digits = s.replace(/\D/g, "");
     return (fams ?? []).filter((f) => {
+      if (site && f.site_id !== site) return false;
       if (!s) return true;
-      const hay = [f.name, ...(f.guardians ?? []).map((g) => g.name), ...(f.children ?? []).map((c) => `${c.first_name} ${c.last_name}`)].join(" ").toLowerCase();
-      return hay.includes(s);
+      const hay = [f.name, ...(f.guardians ?? []).flatMap((g) => [g.name, g.email ?? ""]), ...(f.children ?? []).map((c) => `${c.first_name} ${c.last_name}`)].join(" ").toLowerCase();
+      if (hay.includes(s)) return true;
+      return digits.length >= 4 && (f.guardians ?? []).some((g) => (g.mobile ?? "").replace(/\D/g, "").includes(digits));
     });
-  }, [fams, q]);
+  }, [fams, q, site]);
+  const siteIds = useMemo(() => [...new Set((fams ?? []).map((f) => f.site_id))].sort(), [fams]);
 
   return (
     <>
@@ -38,7 +43,14 @@ export function Families({ staff }: { staff: Staff }) {
       <div className="page">
         <div className="section">
           <label htmlFor="search" className="hint">Search families and children</label>
-          <input id="search" className="search" type="search" placeholder="For example: Avery, Carter, or Dana" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input id="search" className="search" type="search" placeholder="A parent, a child, an email, or a phone number" autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)} />
+          {siteIds.length > 1 && (
+            <div className="chips" role="group" aria-label="Site">
+              <button className="chipbtn" aria-pressed={site === ""} onClick={() => setSite("")}>All sites</button>
+              {siteIds.map((id) => <button key={id} className="chipbtn" aria-pressed={site === id} onClick={() => setSite(id)}>{siteName(id)}</button>)}
+              <span className="hint" style={{ alignSelf: "center" }}>{rows.length} {rows.length === 1 ? "family" : "families"}</span>
+            </div>
+          )}
           <ErrorBox error={error} />
           {fams === null && !error && <Loading what="families" />}
           {fams && (

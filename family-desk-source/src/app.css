@@ -146,6 +146,10 @@ main{min-width:0}
 .field textarea{min-height:90px;resize:vertical}
 .chk{display:flex;align-items:center;gap:10px;margin:4px 0 12px;cursor:pointer}
 .chk input{width:22px;height:22px;accent-color:var(--primary)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.chipbtn{border:1.5px solid var(--line);background:var(--surface);color:var(--primary);font-weight:700;border-radius:999px;padding:8px 14px;cursor:pointer;font-size:.92rem;min-height:40px}
+.chipbtn[aria-pressed="true"]{background:var(--primary);color:#fff;border-color:var(--primary)}
+@media print{.rail,.tabbar,.topbar,.seg,.btn,.linkbtn,.chips{display:none!important}.shell{display:block}.band{background:none;color:#000}.band h1,.band .lede,.band .contact{color:#000}.pane,.list,.roster,.kid{break-inside:avoid;box-shadow:none;border:1px solid #ccc}.page{padding:0}}
 .linkbtn{background:none;border:0;color:var(--primary);font-weight:700;cursor:pointer;padding:0 6px;font-size:.9rem;text-decoration:underline}
 .btn.danger{color:var(--red-text);border-color:var(--red-soft)}
 .btn.danger:hover{border-color:var(--red)}

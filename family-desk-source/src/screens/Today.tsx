@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import type { Attendance, Closure, EsaInvoice, Program, RosterRow, Site, Staff } from "../types";
-import { ageBand, ageOn, arizonaNow, arizonaToday, dateWords, monthWords, timeWords, WEEKDAYS, money, siteName } from "../lib/util";
+import { ageBand, ageOn, ageWords, arizonaNow, arizonaToday, dateWords, monthWords, timeWords, WEEKDAYS, money, siteName } from "../lib/util";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
 import { href } from "../router";
 
@@ -131,7 +131,7 @@ export function Today({ staff }: { staff: Staff }) {
                 </div>
                 {[...bands.entries()].map(([band, list]) => (
                   <div key={band}>
-                    <div className="bandhead"><h3>Ages {band}</h3><span className="hint">{list.length}</span></div>
+                    <div className="bandhead"><h3>{band === "Adults" ? "Adults" : `Ages ${band}`}</h3><span className="hint">{list.length}</span></div>
                     <ul className="roster">
                       {list.map((r) => {
                         const flags = careFlags(r);
@@ -140,7 +140,7 @@ export function Today({ staff }: { staff: Staff }) {
                           <li key={r.child.id} className={m === "present" ? "here" : m === "absent" ? "away" : ""}>
                             <div>
                               <div className="kn">{canMoney ? <a href={href.family(r.child.family_id)}>{r.child.first_name} {r.child.last_name}</a> : `${r.child.first_name} ${r.child.last_name}`}</div>
-                              <div className="km">{ageOn(r.child.birth_date)} years old{r.child.house ? `, House ${r.child.house}` : ""}{r.child.care?.authorized_pickups?.length ? ` · pickup: ${r.child.care.authorized_pickups.join(", ")}` : ""}</div>
+                              <div className="km">{ageWords(r.child.birth_date)}{r.child.house ? `, House ${r.child.house}` : ""}{r.child.care?.authorized_pickups?.length ? ` · pickup: ${r.child.care.authorized_pickups.join(", ")}` : ""}</div>
                             </div>
                             <div className="row">
                               {r.enrollment.pay === "esa" && <Tag kind="esa">ESA</Tag>}

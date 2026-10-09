@@ -136,7 +136,7 @@ export function ChildDialog({ open, onClose, family, child, sites, houses, onSav
     <EditForm open={open} onClose={onClose} title={child ? `Edit ${child.first_name}` : "Add a child"} saveWord={child ? "Save" : "Add child"} onSubmit={async (fd) => {
       const a = await api();
       await a.saveChild({
-        id: child?.id, family_id: family.id, first_name: str(fd, "first_name"), last_name: str(fd, "last_name"), birth_date: str(fd, "birth_date"),
+        id: child?.id, family_id: family.id, first_name: str(fd, "first_name"), last_name: str(fd, "last_name"), birth_date: orNull(str(fd, "birth_date")),
         site_id: str(fd, "site_id"), uniform_size: orNull(str(fd, "uniform_size")), esa: fd.get("esa") === "on", house: orNull(str(fd, "house")), active: child ? str(fd, "active_mirror") !== "off" : true,
       });
       onSaved();
@@ -146,7 +146,7 @@ export function ChildDialog({ open, onClose, family, child, sites, houses, onSav
         <div className="field"><label htmlFor="last_name">Last name</label><input id="last_name" name="last_name" defaultValue={child?.last_name ?? (family.guardians?.[0]?.name.split(" ").slice(-1)[0] ?? "")} required /></div>
       </div>
       <div className="two">
-        <div className="field"><label htmlFor="birth_date">Birth date</label><input id="birth_date" name="birth_date" type="date" defaultValue={child?.birth_date ?? ""} max={arizonaToday()} required /></div>
+        <div className="field"><label htmlFor="birth_date">Birth date</label><input id="birth_date" name="birth_date" type="date" defaultValue={child?.birth_date ?? ""} max={arizonaToday()} /><span className="hint">Leave blank for an adult student.</span></div>
         <SiteSelect sites={sites} value={child?.site_id ?? family.site_id} />
       </div>
       <div className="two">

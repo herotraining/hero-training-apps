@@ -57,7 +57,7 @@ export interface Child {
   family_id: string;
   first_name: string;
   last_name: string;
-  birth_date: string;
+  birth_date: string | null;
   site_id: string;
   uniform_size: string | null;
   esa: boolean;
@@ -89,7 +89,7 @@ export interface Family {
 // What the edit screens send. An id means update; none means create.
 export type FamilyInput = { id?: string; name: string; site_id: string; pay_method: PayMethod; address_line1: string | null; city: string | null; zip: string | null; text_consent: boolean; notes: string | null; status: string };
 export type GuardianInput = { id?: string; family_id: string; name: string; email: string | null; mobile: string | null; is_primary: boolean };
-export type ChildInput = { id?: string; family_id: string; first_name: string; last_name: string; birth_date: string; site_id: string; uniform_size: string | null; esa: boolean; house: string | null; active: boolean };
+export type ChildInput = { id?: string; family_id: string; first_name: string; last_name: string; birth_date: string | null; site_id: string; uniform_size: string | null; esa: boolean; house: string | null; active: boolean };
 export type CareInput = Omit<CareNotes, "child_id">;
 export type EnrollmentInput = { id?: string; child_id: string; program_id: string; status: EnrollmentStatus; pay: "esa" | "card"; start_date: string; end_date: string | null };
 export const AGREEMENT_KINDS = ["waiver", "photo_release", "policies"] as const;

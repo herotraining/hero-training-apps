@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { AGREEMENT_KINDS, type Child, type Enrollment, type EsaInvoice, type Family as Fam, type Guardian, type Program, type Site, type Staff, type StripePicture } from "../types";
-import { ageOn, dateWords, ESA_LABEL, money, monthWords, unixWords, WEEKDAYS, timeWords, siteName } from "../lib/util";
+import { ageWords, dateWords, ESA_LABEL, money, monthWords, unixWords, WEEKDAYS, timeWords, siteName } from "../lib/util";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
 import { href } from "../router";
 import { CareDialog, ChildDialog, EnrollDialog, FamilyDialog, GuardianDialog, STATUS_WORDS } from "./FamilyEdit";
@@ -83,7 +83,8 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
   const others = (fam.guardians ?? []).filter((g) => g !== primary);
   const agreements = AGREEMENT_KINDS.map((k) => (fam.agreements ?? []).find((a) => a.kind === k) ?? { id: k, kind: k, signed_at: null, signed_by: null });
   const unsigned = agreements.filter((a) => !a.signed_at);
-  const kids = (fam.children ?? []).slice().sort((a, b) => a.birth_date.localeCompare(b.birth_date));
+  const kids = (fam.children ?? []).slice().sort((a, b) => (a.birth_date ?? "9999").localeCompare(b.birth_date ?? "9999"));
+  const agreementsRecorded = (fam.agreements ?? []).length > 0;
 
   return (
     <>
@@ -99,7 +100,7 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
       </Band>
       <div className="page">
         <ErrorBox error={error} />
-        {unsigned.length > 0 && <div className="section"><div className="err">Not signed yet: {unsigned.map((a) => AGREEMENT[a.kind] ?? a.kind).join(", ")}.</div></div>}
+        {agreementsRecorded && unsigned.length > 0 && <div className="section"><div className="err">Not signed yet: {unsigned.map((a) => AGREEMENT[a.kind] ?? a.kind).join(", ")}.</div></div>}
 
         <div className="section">
           <h2>Children</h2>
@@ -108,7 +109,7 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
             {kids.map((c) => (
               <div key={c.id} className={"kid" + (c.active ? "" : " off")}>
                 <div className="nm">{c.first_name} {c.last_name}{!c.active && <Tag kind="warn">Left</Tag>}</div>
-                <div className="meta">{ageOn(c.birth_date)} years old{c.house ? `, House ${c.house}` : ""}{c.uniform_size ? `, uniform ${c.uniform_size}` : ""}{c.site_id !== fam.site_id ? `, ${siteName(c.site_id)}` : ""}{c.esa ? ", ESA" : ""}</div>
+                <div className="meta">{ageWords(c.birth_date)}{c.house ? `, House ${c.house}` : ""}{c.uniform_size ? `, uniform ${c.uniform_size}` : ""}{c.site_id !== fam.site_id ? `, ${siteName(c.site_id)}` : ""}{c.esa ? ", ESA" : ""}</div>
                 <ul>
                   {(c.enrollments ?? []).map((e) => (
                     <li key={e.id}>
@@ -157,9 +158,10 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
         <div className="section">
           <h2>Agreements</h2>
           <div className="pane">
+            {!agreementsRecorded && <p className="hint" style={{ marginBottom: 8 }}>Not recorded in Family Desk yet; Jackrabbit still holds this family's signed forms. Mark each one here as you confirm it.</p>}
             {agreements.map((a) => (
               <div key={a.kind} className="line" style={{ alignItems: "center" }}>
-                <span>{AGREEMENT[a.kind] ?? a.kind}<span className="hint" style={{ display: "block" }}>{a.signed_at ? `Signed ${dateWords(a.signed_at)}${a.signed_by ? ` by ${a.signed_by}` : ""}` : "Not signed"}</span></span>
+                <span>{AGREEMENT[a.kind] ?? a.kind}<span className="hint" style={{ display: "block" }}>{a.signed_at ? `Signed ${dateWords(a.signed_at)}${a.signed_by ? ` by ${a.signed_by}` : ""}` : agreementsRecorded ? "Not signed" : "Not recorded"}</span></span>
                 {canEdit && (a.signed_at
                   ? <button className="btn quiet small" onClick={async () => { try { const x = await api(); await x.setAgreement(fam.id, a.kind, null); saved(`${AGREEMENT[a.kind]} marked unsigned.`); } catch (err) { setError((err as Error).message); } }}>Undo</button>
                   : <button className="btn quiet small" onClick={() => setOpen({ kind: "sign", agreement: a.kind })}>Mark signed</button>)}

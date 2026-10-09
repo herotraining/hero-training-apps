@@ -73,7 +73,7 @@ export function supabaseApi(): Api {
         rows: (enrs ?? [])
           .filter((e: any) => e.program_id === program.id && e.child)
           .map((e: any): RosterRow => ({ enrollment: e, child: { ...e.child, care: Array.isArray(e.child.care) ? e.child.care[0] ?? null : e.child.care ?? null } }))
-          .sort((a: RosterRow, b: RosterRow) => a.child.birth_date.localeCompare(b.child.birth_date)),
+          .sort((a: RosterRow, b: RosterRow) => (a.child.birth_date ?? "9999").localeCompare(b.child.birth_date ?? "9999")),
       }));
     },
     async saveFamily(f) {

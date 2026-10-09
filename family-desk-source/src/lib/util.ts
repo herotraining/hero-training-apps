@@ -14,13 +14,19 @@ export function arizonaToday(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export function ageOn(birth: string, on = arizonaToday()): number {
+export function ageOn(birth: string | null | undefined, on = arizonaToday()): number | null {
+  if (!birth) return null;
   const b = new Date(birth + "T12:00:00"), d = new Date(on + "T12:00:00");
   let a = d.getFullYear() - b.getFullYear();
   if (d.getMonth() < b.getMonth() || (d.getMonth() === b.getMonth() && d.getDate() < b.getDate())) a--;
   return a;
 }
-export function ageBand(age: number): string {
+export function ageWords(birth: string | null | undefined): string {
+  const a = ageOn(birth);
+  return a === null ? "birth date not on file" : `${a} years old`;
+}
+export function ageBand(age: number | null): string {
+  if (age === null) return "Adults";
   if (age <= 6) return "4 to 6";
   if (age <= 9) return "7 to 9";
   return "10 and up";

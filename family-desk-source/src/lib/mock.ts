@@ -96,7 +96,7 @@ export function mockApi(): Api {
     async rosterFor(weekday) {
       return programs.filter((p) => p.weekday === weekday).map((program) => ({
         program,
-        rows: allChildren().flatMap((c) => (c.enrollments ?? []).filter((e) => e.program_id === program.id && e.status === "active").map((enrollment): RosterRow => ({ child: c, enrollment }))).sort((a, b) => a.child.birth_date.localeCompare(b.child.birth_date)),
+        rows: allChildren().flatMap((c) => (c.enrollments ?? []).filter((e) => e.program_id === program.id && e.status === "active").map((enrollment): RosterRow => ({ child: c, enrollment }))).sort((a, b) => (a.child.birth_date ?? "9999").localeCompare(b.child.birth_date ?? "9999")),
       }));
     },
     async saveFamily(f) {

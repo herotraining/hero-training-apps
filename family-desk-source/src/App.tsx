@@ -8,6 +8,7 @@ import { Families } from "./screens/Families";
 import { Family } from "./screens/Family";
 import { Money } from "./screens/Money";
 import { StaffScreen } from "./screens/StaffScreen";
+import { Programs } from "./screens/Programs";
 import { ErrorBox, Icon } from "./ui";
 
 function Screens({ signOut }: { signOut: () => void }) {
@@ -36,6 +37,7 @@ function Screens({ signOut }: { signOut: () => void }) {
   else if (route.name === "family" && staff.role !== "coach") screen = <Family id={route.id} staff={staff} />;
   else if (route.name === "money" && canMoney) screen = <Money />;
   else if (route.name === "staff" && staff.role === "owner") screen = <StaffScreen />;
+  else if (route.name === "programs" && staff.role === "owner") screen = <Programs />;
   else screen = <Today staff={staff} />;
 
   return <Shell staff={staff} route={route} onSignOut={signOut} mock={IS_MOCK}>{screen}</Shell>;

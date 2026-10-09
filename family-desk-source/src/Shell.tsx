@@ -15,6 +15,7 @@ export function Shell({ staff, route, onSignOut, mock, children }: { staff: Staf
     { key: "today", label: "Today", to: href.today, icon: Icon.today, show: true },
     { key: "families", label: "Families", to: href.families, icon: Icon.families, show: !isCoach },
     { key: "money", label: "Money", to: href.money, icon: Icon.money, show: canMoney },
+    { key: "programs", label: "Programs", to: href.programs, icon: Icon.programs, show: staff.role === "owner" },
     { key: "staff", label: "Staff", to: href.staff, icon: Icon.staff, show: staff.role === "owner" },
   ];
   const current = (k: string) => route.name === k || (k === "families" && route.name === "family");

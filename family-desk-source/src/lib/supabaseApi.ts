@@ -124,6 +124,20 @@ export function supabaseApi(): Api {
       else { const { error: e2 } = await sb.from("enrollments").insert(rest); fail(e2); }
     },
     async removeEnrollment(id) { const { error } = await sb.from("enrollments").delete().eq("id", id); fail(error); },
+    async attendanceFor(dateIso) { const { data, error } = await sb.from("attendance").select("id, enrollment_id, on_date, status").eq("on_date", dateIso); fail(error); return data ?? []; },
+    async markAttendance(enrollmentId, dateIso, status) {
+      if (!status) { const { error } = await sb.from("attendance").delete().eq("enrollment_id", enrollmentId).eq("on_date", dateIso); fail(error); return; }
+      const { error } = await sb.from("attendance").upsert({ enrollment_id: enrollmentId, on_date: dateIso, status }, { onConflict: "enrollment_id,on_date" });
+      fail(error);
+    },
+    async allPrograms() { const { data, error } = await sb.from("programs").select("*").order("site_id").order("weekday").order("start_time"); fail(error); return data ?? []; },
+    async saveProgram(p) { const { error } = await sb.from("programs").upsert(p, { onConflict: "id" }); fail(error); },
+    async saveClosure(c) {
+      const { id, ...rest } = c;
+      const { error } = id ? await sb.from("closures").update(rest).eq("id", id) : await sb.from("closures").insert(rest);
+      fail(error);
+    },
+    async removeClosure(id) { const { error } = await sb.from("closures").delete().eq("id", id); fail(error); },
     async closures(fromIso) {
       const { data, error } = await sb.from("closures").select("*").gte("on_date", fromIso).order("on_date").limit(20);
       fail(error);

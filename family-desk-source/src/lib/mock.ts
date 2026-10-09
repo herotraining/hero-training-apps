@@ -8,7 +8,7 @@ const sites = [
   { id: "prescott", name: "Prescott", gym: "Storm Elite Gymnastics Academy", city: "Prescott" },
   { id: "lab", name: "L.A.B.", gym: "Learn. Adapt. Build.", city: "Glendale" },
 ];
-const programs: Program[] = [
+let programs: Program[] = [
   { id: "coop-peoria-tue", name: "Co-op Day, Peoria, Tuesdays", kind: "coop", site_id: "peoria", weekday: 2, start_time: "10:00", end_time: "14:00", monthly_price_cents: 25000 },
   { id: "coop-peoria-thu", name: "Co-op Day, Peoria, Thursdays", kind: "coop", site_id: "peoria", weekday: 4, start_time: "10:00", end_time: "14:00", monthly_price_cents: 25000 },
   { id: "coop-prescott-mon", name: "Co-op Day, Prescott, Mondays", kind: "coop", site_id: "prescott", weekday: 1, start_time: "10:00", end_time: "14:00", monthly_price_cents: 25000 },
@@ -19,7 +19,13 @@ const programs: Program[] = [
   { id: "family-fitness-peoria-wed", name: "Family Fitness, Peoria, Wednesdays", kind: "family_fitness", site_id: "peoria", weekday: 3, start_time: "12:00", end_time: "13:00", monthly_price_cents: 10000 },
   { id: "star-team-peoria", name: "Star Team, Peoria", kind: "star_team", site_id: "peoria", weekday: 3, start_time: "13:00", end_time: "14:00", monthly_price_cents: 15000 },
 ];
-const P = Object.fromEntries(programs.map((p) => [p.id, p]));
+const P: Record<string, Program> = Object.fromEntries(programs.map((p) => [p.id, p]));
+let attendance: { id: string; enrollment_id: string; on_date: string; status: "present" | "absent" }[] = [];
+let closures = [
+  { id: "cl1", site_id: "peoria", on_date: "2026-10-30", title: "No Peoria classes: gym closed for a meet", note: null as string | null },
+  { id: "cl2", site_id: null, on_date: "2026-11-26", title: "Thanksgiving: no classes", note: null as string | null },
+  { id: "cl3", site_id: null, on_date: "2026-11-27", title: "Thanksgiving Friday: no classes", note: null as string | null },
+];
 
 function child(id: string, family_id: string, first: string, last: string, birth: string, site: string, size: string, esa: boolean, house: string, care: Partial<NonNullable<Child["care"]>>, enr: [string, "esa" | "card", Enrollment["status"]][]): Child {
   return {
@@ -84,7 +90,7 @@ export function mockApi(): Api {
     mock: true,
     async profile() { return { staff: staff[0], aal: "aal2" }; },
     async sites() { return sites; },
-    async programs() { return programs; },
+    async programs() { return programs.filter((p) => p.active !== false); },
     async families() { await sleep(80); return families; },
     async family(id) { return families.find((f) => f.id === id) ?? null; },
     async rosterFor(weekday) {
@@ -138,12 +144,16 @@ export function mockApi(): Api {
       }) }));
     },
     async removeEnrollment(id) { families = families.map((f) => ({ ...f, children: (f.children ?? []).map((k) => ({ ...k, enrollments: (k.enrollments ?? []).filter((x) => x.id !== id) })) })); },
-    async closures() {
-      return [
-        { id: "c1", site_id: "peoria", on_date: "2026-10-30", title: "Oasis camp day: no Peoria co-op", note: "Oasis reserved the gym." },
-        { id: "c2", site_id: null, on_date: "2026-11-26", title: "Thanksgiving: no classes", note: "All sites closed Thursday and Friday." },
-      ];
+    async attendanceFor(dateIso) { return attendance.filter((a) => a.on_date === dateIso); },
+    async markAttendance(enrollmentId, dateIso, status) {
+      attendance = attendance.filter((a) => !(a.enrollment_id === enrollmentId && a.on_date === dateIso));
+      if (status) attendance = [...attendance, { id: "at" + Date.now(), enrollment_id: enrollmentId, on_date: dateIso, status }];
     },
+    async allPrograms() { return programs; },
+    async saveProgram(p) { const i = programs.findIndex((x) => x.id === p.id); if (i >= 0) programs[i] = { ...programs[i], ...p }; else programs = [...programs, p]; P[p.id] = programs.find((x) => x.id === p.id)!; },
+    async saveClosure(c) { if (c.id) closures = closures.map((x) => (x.id === c.id ? { ...x, ...c, id: c.id! } : x)); else closures = [...closures, { ...c, id: "cl" + Date.now() }]; },
+    async removeClosure(id) { closures = closures.filter((x) => x.id !== id); },
+    async closures(fromIso) { return closures.filter((c) => c.on_date >= fromIso).sort((a, b) => a.on_date.localeCompare(b.on_date)); },
     async esaInvoices() { return esa; },
     async stripeFamily(familyId) {
       await sleep(200);

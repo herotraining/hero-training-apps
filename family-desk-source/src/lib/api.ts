@@ -1,5 +1,5 @@
 // One data layer with two backs: Supabase for real use, built-in made-up data when VITE_MOCK=1.
-import type { CareInput, Child, ChildInput, Closure, EnrollmentInput, EsaInvoice, Family, FamilyInput, GuardianInput, Program, Profile, RosterRow, Site, Staff, StripePicture } from "../types";
+import type { Attendance, CareInput, Child, ChildInput, Closure, ClosureInput, EnrollmentInput, EsaInvoice, Family, FamilyInput, GuardianInput, Program, ProgramInput, Profile, RosterRow, Site, Staff, StripePicture } from "../types";
 
 export interface Api {
   mock: boolean;
@@ -17,6 +17,12 @@ export interface Api {
   setAgreement(familyId: string, kind: string, signedBy: string | null): Promise<void>;
   saveEnrollment(e: EnrollmentInput): Promise<void>;
   removeEnrollment(id: string): Promise<void>;
+  attendanceFor(dateIso: string): Promise<Attendance[]>;
+  markAttendance(enrollmentId: string, dateIso: string, status: "present" | "absent" | null): Promise<void>;
+  allPrograms(): Promise<Program[]>;
+  saveProgram(p: ProgramInput): Promise<void>;
+  saveClosure(c: ClosureInput): Promise<void>;
+  removeClosure(id: string): Promise<void>;
   closures(fromIso: string): Promise<Closure[]>;
   esaInvoices(): Promise<EsaInvoice[]>;
   stripeFamily(familyId: string): Promise<StripePicture>;

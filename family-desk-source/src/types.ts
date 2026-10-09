@@ -23,7 +23,11 @@ export interface Program {
   start_time: string | null;
   end_time: string | null;
   monthly_price_cents: number;
+  active?: boolean;
 }
+export type ProgramInput = { id: string; name: string; kind: string; site_id: string; weekday: number | null; start_time: string | null; end_time: string | null; monthly_price_cents: number; active: boolean };
+export type ClosureInput = { id?: string; site_id: string | null; on_date: string; title: string; note: string | null };
+export interface Attendance { id: string; enrollment_id: string; on_date: string; status: "present" | "absent" }
 
 export interface Guardian { id: string; family_id: string; name: string; email: string | null; mobile: string | null; is_primary: boolean }
 

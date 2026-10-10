@@ -16,7 +16,7 @@ const server = createServer(async (req, res) => {
 });
 await new Promise((r) => server.listen(4173, r));
 
-const routes = [["today", "#/today"], ["families", "#/families"], ["family", "#/families/fb"], ["money", "#/money"], ["staff", "#/staff"], ["programs", "#/programs"]];
+const routes = [["today", "#/today"], ["families", "#/families"], ["family", "#/families/fb"], ["family-a", "#/families/fa"], ["money", "#/money"], ["staff", "#/staff"], ["programs", "#/programs"]];
 const sizes = [["phone", 390, 844], ["desktop", 1280, 860]];
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 for (const [sname, w, h] of sizes) {

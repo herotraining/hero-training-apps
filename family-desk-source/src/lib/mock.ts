@@ -1,6 +1,6 @@
 // Made-up data mirroring the practice families, for screenshots and design work without a sign-in.
 import type { Api } from "./api";
-import type { Child, Enrollment, EsaInvoice, Family, Program, RosterRow, Staff } from "../types";
+import type { Child, Enrollment, EsaInvoice, Family, JackrabbitLine, Program, RosterRow, Staff } from "../types";
 
 const sites = [
   { id: "peoria", name: "Peoria", gym: "Oasis Gymnastics", city: "Peoria" },
@@ -20,6 +20,14 @@ let programs: Program[] = [
   { id: "star-team-peoria", name: "Star Team, Peoria", kind: "star_team", site_id: "peoria", weekday: 3, start_time: "13:00", end_time: "14:00", monthly_price_cents: 15000 },
 ];
 const P: Record<string, Program> = Object.fromEntries(programs.map((p) => [p.id, p]));
+const jackrabbit: JackrabbitLine[] = [
+  { id: "j1", family_id: "fa", on_date: "2026-10-01", kind: "Tuition Fee", subtype: null, student: "Avery", activity: "11: Hero Co op Tuesday", amount_cents: 22000, note: "October" },
+  { id: "j2", family_id: "fa", on_date: "2026-09-29", kind: "Payment", subtype: "Oct", student: null, activity: null, amount_cents: -22000, note: null },
+  { id: "j3", family_id: "fa", on_date: "2026-09-01", kind: "Tuition Fee", subtype: null, student: "Avery", activity: "11: Hero Co op Tuesday", amount_cents: 22000, note: "September" },
+  { id: "j4", family_id: "fa", on_date: "2026-08-29", kind: "Payment", subtype: "Sep", student: null, activity: null, amount_cents: -22000, note: null },
+  { id: "j5", family_id: "fa", on_date: "2026-08-22", kind: "Uniform: (Required)", subtype: "Hero Uniform: Tank Top", student: "Avery", activity: "11: Hero Co op Tuesday", amount_cents: 2500, note: null },
+  { id: "j6", family_id: "fa", on_date: "2026-08-22", kind: "Payment", subtype: "Aug", student: null, activity: null, amount_cents: -2500, note: "Paid at the card terminal" },
+];
 let attendance: { id: string; enrollment_id: string; on_date: string; status: "present" | "absent" }[] = [];
 let closures = [
   { id: "cl1", site_id: "peoria", on_date: "2026-10-30", title: "No Peoria classes: gym closed for a meet", note: null as string | null },
@@ -38,7 +46,7 @@ function child(id: string, family_id: string, first: string, last: string, birth
 let families: Family[] = [
   { id: "fa", name: "Test Family A", site_id: "peoria", pay_method: "esa", stripe_customer_id: "cus_A", city: "Surprise", zip: "85379", text_consent: true, notes: "Practice family: ESA, one child, Tuesday co-op.", status: "active",
     guardians: [{ id: "ga", family_id: "fa", name: "Alex Anderson", email: "test.family.a@example.com", mobile: "(602) 555-0101", is_primary: true }],
-    children: [child("ca1", "fa", "Avery", "Anderson", "2018-03-14", "peoria", "YM", true, "Lion", { emergency_contacts: [{ name: "Grandma Anderson", phone: "(602) 555-0201" }], authorized_pickups: ["Alex Anderson", "Grandma Anderson"] }, [["coop-peoria-tue", "esa", "active"]])],
+    children: [child("ca1", "fa", "Avery", "Anderson", "2018-03-14", "peoria", "YM", true, "Lion", { emergency_contacts: [{ name: "Grandma Anderson", phone: "(602) 555-0201" }], authorized_pickups: ["Alex Anderson", "Grandma Anderson"] }, [["coop-peoria-tue", "esa", "active"]])].map((k) => ({ ...k, enrollments: [...(k.enrollments ?? []), { id: "ca1-past", child_id: "ca1", program_id: "tumbling-peoria-fri", status: "dropped" as const, pay: "esa" as const, start_date: "2025-09-01", end_date: "2026-05-31", note: "Dropped in Jackrabbit: Summer break", program: P["tumbling-peoria-fri"] }] })),
     agreements: [{ id: "1", kind: "waiver", signed_at: "2026-09-18", signed_by: "Alex Anderson" }, { id: "2", kind: "photo_release", signed_at: "2026-09-18", signed_by: "Alex Anderson" }, { id: "3", kind: "policies", signed_at: "2026-09-18", signed_by: "Alex Anderson" }] },
   { id: "fb", name: "Test Family B", site_id: "peoria", pay_method: "private", stripe_customer_id: "cus_B", city: "Surprise", zip: "85379", text_consent: true, notes: "Practice family: card, Thursday co-op plus Friday tumbling.", status: "active",
     guardians: [{ id: "gb", family_id: "fb", name: "Bailey Brooks", email: "test.family.b@example.com", mobile: "(602) 555-0102", is_primary: true }],
@@ -142,11 +150,12 @@ export function mockApi(): Api {
       families = families.map((f) => ({ ...f, children: (f.children ?? []).map((k) => {
         if (k.id !== e.child_id) return k;
         const list = k.enrollments ?? [];
-        const existing = list.find((x) => (e.id ? x.id === e.id : x.program_id === e.program_id));
+        const existing = list.find((x) => (e.id ? x.id === e.id : x.program_id === e.program_id && x.status !== "dropped"));
         const row: Enrollment = { ...(existing ?? { id: "e" + Date.now() }), ...e, id: existing?.id ?? "e" + Date.now(), program: P[e.program_id] };
         return { ...k, enrollments: existing ? list.map((x) => (x.id === row.id ? row : x)) : [...list, row] };
       }) }));
     },
+    async jackrabbitHistory(familyId) { await sleep(80); return jackrabbit.filter((j) => j.family_id === familyId); },
     async removeEnrollment(id) { families = families.map((f) => ({ ...f, children: (f.children ?? []).map((k) => ({ ...k, enrollments: (k.enrollments ?? []).filter((x) => x.id !== id) })) })); },
     async attendanceFor(dateIso) { return attendance.filter((a) => a.on_date === dateIso); },
     async markAttendance(enrollmentId, dateIso, status) {

@@ -49,7 +49,21 @@ export interface Enrollment {
   pay: "esa" | "card";
   start_date: string;
   end_date?: string | null;
+  note?: string | null;
   program?: Program;
+}
+
+/** One line of the Jackrabbit ledger we brought over (fees, payments, uniforms, refunds). */
+export interface JackrabbitLine {
+  id: string;
+  family_id: string | null;
+  on_date: string;
+  kind: string;
+  subtype: string | null;
+  student: string | null;
+  activity: string | null;
+  amount_cents: number;
+  note: string | null;
 }
 
 export interface Child {
@@ -91,7 +105,7 @@ export type FamilyInput = { id?: string; name: string; site_id: string; pay_meth
 export type GuardianInput = { id?: string; family_id: string; name: string; email: string | null; mobile: string | null; is_primary: boolean };
 export type ChildInput = { id?: string; family_id: string; first_name: string; last_name: string; birth_date: string | null; site_id: string; uniform_size: string | null; esa: boolean; house: string | null; active: boolean };
 export type CareInput = Omit<CareNotes, "child_id">;
-export type EnrollmentInput = { id?: string; child_id: string; program_id: string; status: EnrollmentStatus; pay: "esa" | "card"; start_date: string; end_date: string | null };
+export type EnrollmentInput = { id?: string; child_id: string; program_id: string; status: EnrollmentStatus; pay: "esa" | "card"; start_date: string; end_date: string | null; note?: string | null };
 export const AGREEMENT_KINDS = ["waiver", "photo_release", "policies"] as const;
 
 export interface EsaInvoice {

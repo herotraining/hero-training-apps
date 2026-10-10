@@ -5,7 +5,7 @@ import type { Program, Site } from "../types";
 import { money, siteName, timeWords, WEEKDAYS } from "../lib/util";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
 
-const KINDS: [string, string][] = [["coop", "Co-op Day"], ["class", "Class"], ["tumbling", "Tumbling"], ["gymnastics", "Gymnastics"], ["rally_saber", "Rally Saber"], ["star_team", "Star Team"], ["family_fitness", "Family Fitness"], ["other", "Other"]];
+const KINDS: [string, string][] = [["coop", "Co-op Day"], ["class", "Class"], ["tumbling", "Tumbling"], ["gymnastics", "Gymnastics"], ["rally_saber", "Rally Saber"], ["star_team", "Star Team"], ["family_fitness", "Family Fitness"], ["clinic", "Clinic"], ["open_gym", "Open training"], ["event", "Camp or event"], ["other", "Other"]];
 
 function slug(s: string): string { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48); }
 
@@ -42,7 +42,8 @@ export function Programs() {
 
   const cur = editing && editing !== "new" ? editing : null;
   const bySite = new Map<string, Program[]>();
-  for (const p of programs ?? []) bySite.set(p.site_id, [...(bySite.get(p.site_id) ?? []), p]);
+  // Running programs first within each site; programs that are off (including the old Jackrabbit ones) sink to the bottom.
+  for (const p of [...(programs ?? [])].sort((a, b) => Number(b.active !== false) - Number(a.active !== false))) bySite.set(p.site_id, [...(bySite.get(p.site_id) ?? []), p]);
 
   return (
     <>

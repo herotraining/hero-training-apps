@@ -118,6 +118,9 @@ main{min-width:0}
 .kid .nm{font-family:var(--display);font-weight:700;font-size:1.75rem;line-height:1.1;color:var(--head)}
 .kid .meta{color:var(--muted);font-size:.93rem}
 .kid ul{margin:10px 0 0;padding-left:18px;list-style:disc}
+.kid .past{margin-top:8px}
+.kid .past ul{margin-top:4px;color:var(--muted)}
+.kid .past li{font-size:.92em}
 .note{margin-top:10px;background:var(--red-soft);color:var(--red-text);border-radius:10px;padding:8px 12px;font-size:.92rem}
 .care{margin-top:10px;font-size:.93rem;color:var(--muted)}
 .care b{color:var(--text)}

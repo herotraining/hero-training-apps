@@ -196,7 +196,7 @@ export function EnrollDialog({ open, onClose, child, family, programs, enrollmen
         const input: EnrollmentInput = {
           id: enrollment?.id, child_id: child.id, program_id: enrollment?.program_id ?? str(fd, "program_id"),
           status: str(fd, "status") as EnrollmentStatus, pay: str(fd, "pay") as "esa" | "card",
-          start_date: str(fd, "start_date") || arizonaToday(), end_date: orNull(str(fd, "end_date")),
+          start_date: str(fd, "start_date") || arizonaToday(), end_date: orNull(str(fd, "end_date")), note: orNull(str(fd, "note")),
         };
         await a.saveEnrollment(input);
         onSaved();
@@ -221,7 +221,8 @@ export function EnrollDialog({ open, onClose, child, family, programs, enrollmen
         <div className="field"><label htmlFor="start_date">Start date</label><input id="start_date" name="start_date" type="date" defaultValue={enrollment?.start_date ?? arizonaToday()} /></div>
         <div className="field"><label htmlFor="end_date">End date, if dropping</label><input id="end_date" name="end_date" type="date" defaultValue={enrollment?.end_date ?? ""} /></div>
       </div>
-      <p className="hint">Billing stays wherever it is now (Jackrabbit or Stripe); this only changes the roster.</p>
+      <div className="field"><label htmlFor="note">Note (why they dropped, moved days, etc.)</label><input id="note" name="note" defaultValue={enrollment?.note ?? ""} placeholder="Moved to Thursday co-op" /></div>
+      <p className="hint">Billing stays wherever it is now (Jackrabbit or Stripe); this only changes the roster. Dropped rows stay on the page as past classes.</p>
     </EditForm>
   );
 }

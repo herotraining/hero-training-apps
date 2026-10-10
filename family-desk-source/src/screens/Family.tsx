@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import { AGREEMENT_KINDS, type Child, type Enrollment, type EsaInvoice, type Family as Fam, type Guardian, type Program, type Site, type Staff, type StripePicture } from "../types";
+import { AGREEMENT_KINDS, type Child, type Enrollment, type EsaInvoice, type Family as Fam, type Guardian, type JackrabbitLine, type Program, type Site, type Staff, type StripePicture } from "../types";
 import { ageWords, dateWords, ESA_LABEL, money, monthWords, unixWords, WEEKDAYS, timeWords, siteName } from "../lib/util";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
 import { href } from "../router";
@@ -24,6 +24,9 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
   const [sites, setSites] = useState<Site[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [houses, setHouses] = useState<string[]>([]);
+  const [history, setHistory] = useState<JackrabbitLine[] | null>(null);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [pastOpen, setPastOpen] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [toast, show] = useToast();
   const canMoney = staff.role === "owner" || staff.role === "admin";
@@ -36,6 +39,7 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
       const inv = await a.esaInvoices();
       setInvoices(inv.filter((i) => i.child?.family_id === f.id));
       a.stripeFamily(f.id).then(setStripe).catch((e) => setStripeErr(e.message));
+      a.jackrabbitHistory(f.id).then(setHistory).catch(() => setHistory([]));
     }
   }
   useEffect(() => { load().catch((e) => setError(e.message)); /* eslint-disable-next-line */ }, [id]);
@@ -112,14 +116,29 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
                 <div className="nm">{c.first_name} {c.last_name}{!c.active && <Tag kind="warn">Left</Tag>}</div>
                 <div className="meta">{ageWords(c.birth_date)}{c.house ? `, House ${c.house}` : ""}{c.uniform_size ? `, uniform ${c.uniform_size}` : ""}{c.site_id !== fam.site_id ? `, ${siteName(c.site_id)}` : ""}{c.esa ? ", ESA" : ""}</div>
                 <ul>
-                  {(c.enrollments ?? []).map((e) => (
+                  {openEnrollments(c).map((e) => (
                     <li key={e.id}>
                       {e.program?.name ?? e.program_id}{e.program?.weekday != null ? ` (${WEEKDAYS[e.program.weekday]}${e.program.start_time ? ` ${timeWords(e.program.start_time)}` : ""})` : ""} · {e.pay === "esa" ? "ESA" : "card"}{e.status !== "active" ? ` · ${STATUS_WORDS[e.status].toLowerCase()}` : ""}
                       {canEdit && <button className="linkbtn" onClick={() => setOpen({ kind: "enroll", child: c, enrollment: e })}>change</button>}
                     </li>
                   ))}
-                  {(c.enrollments ?? []).length === 0 && <li>Not enrolled in anything</li>}
+                  {openEnrollments(c).length === 0 && <li>Not enrolled in anything</li>}
                 </ul>
+                {pastEnrollments(c).length > 0 && (
+                  <div className="past">
+                    <button className="linkbtn" onClick={() => setPastOpen((m) => ({ ...m, [c.id]: !m[c.id] }))}>{pastOpen[c.id] ? "Hide past classes" : `Past classes (${pastEnrollments(c).length})`}</button>
+                    {pastOpen[c.id] && (
+                      <ul>
+                        {pastEnrollments(c).map((e) => (
+                          <li key={e.id}>
+                            {e.program?.name ?? e.program_id} · {dateWords(e.start_date)}{e.end_date ? ` to ${dateWords(e.end_date)}` : ""}{e.note ? <span className="hint" style={{ display: "block" }}>{e.note}</span> : null}
+                            {canEdit && <button className="linkbtn" onClick={() => setOpen({ kind: "enroll", child: c, enrollment: e })}>change</button>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 {c.care && (c.care.allergies || c.care.medications || c.care.notes) && (
                   <div className="note">{[c.care.allergies && `Allergy: ${c.care.allergies}`, c.care.medications && `Medication: ${c.care.medications}`, c.care.notes].filter(Boolean).join(" · ")}</div>
                 )}
@@ -225,6 +244,25 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
           </div>
         )}
 
+        {canMoney && history && history.length > 0 && (
+          <div className="section">
+            <h2>Jackrabbit history</h2>
+            <div className="pane">
+              <p className="hint" style={{ marginBottom: 8 }}>
+                Fees and payments brought over from Jackrabbit (Aug 2025 to {dateWords(history[0].on_date)}); amounts before November 2026 are at the old prices.
+                Balance at hand-off: <b>{money(history.reduce((n, h) => n + h.amount_cents, 0))}</b>{history.reduce((n, h) => n + h.amount_cents, 0) > 0 ? " still owed" : history.reduce((n, h) => n + h.amount_cents, 0) < 0 ? " in credit" : ", all square"}.
+              </p>
+              {(showAllHistory ? history : history.slice(0, 12)).map((h) => (
+                <div key={h.id} className="line">
+                  <span>{dateWords(h.on_date)}, {historyWords(h)}{h.note ? <span className="hint" style={{ display: "block" }}>{h.note}</span> : null}</span>
+                  <span className="v">{h.amount_cents < 0 ? `−${money(-h.amount_cents)}` : money(h.amount_cents)}</span>
+                </div>
+              ))}
+              {history.length > 12 && <div className="row" style={{ marginTop: 8 }}><button className="linkbtn" onClick={() => setShowAllHistory((v) => !v)}>{showAllHistory ? "Show fewer" : `Show all ${history.length} entries`}</button></div>}
+            </div>
+          </div>
+        )}
+
         {fam.notes && <div className="section"><h2>Notes</h2><div className="pane">{fam.notes}</div></div>}
       </div>
 
@@ -257,4 +295,15 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
       <Toast msg={toast} />
     </>
   );
+}
+
+const OPEN: Enrollment["status"][] = ["active", "hold", "waitlist"];
+function openEnrollments(c: Child): Enrollment[] { return (c.enrollments ?? []).filter((e) => OPEN.includes(e.status)); }
+function pastEnrollments(c: Child): Enrollment[] { return (c.enrollments ?? []).filter((e) => !OPEN.includes(e.status)).sort((a, b) => (b.end_date ?? b.start_date).localeCompare(a.end_date ?? a.start_date)); }
+
+const KIND_WORDS: Record<string, string> = { "Tuition Fee": "tuition", "Payment": "payment", "Uniform: (Required)": "uniform", "Merchandise": "merchandise", "Surcharge": "card surcharge", "Drop-In": "drop-in", "Non-monetary Credit": "credit", "Fee Credit - Tuition Fee": "tuition credit", "Refund Adjustment": "refund", "Refund - Tuition Fee": "tuition refund", "Refund - Surcharge": "surcharge refund", "Refund - Overpayment": "overpayment refund", "Refund - Drop-In": "drop-in refund" };
+function historyWords(h: JackrabbitLine): string {
+  const what = KIND_WORDS[h.kind] ?? h.kind.toLowerCase();
+  const bits = [h.student, h.activity ?? (h.kind === "Payment" && h.subtype ? `for ${h.subtype}` : h.subtype)].filter(Boolean);
+  return bits.length ? `${what}: ${bits.join(", ")}` : what;
 }

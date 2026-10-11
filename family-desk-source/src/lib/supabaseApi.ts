@@ -170,7 +170,7 @@ export function supabaseApi(): Api {
     },
     async setFeedStatus(id, status) { const { error } = await sb.from("desk_feed").update({ status }).eq("id", id); fail(error); },
     async classwalletDeposits(sinceIso) {
-      const { data, error } = await sb.from("classwallet_deposits").select("*").gte("on_date", sinceIso).order("on_date", { ascending: false }).limit(400);
+      const { data, error } = await sb.from("classwallet_deposits").select("*, order:classwallet_orders(student, order_date, child_id, family_id)").gte("on_date", sinceIso).order("on_date", { ascending: false }).limit(400);
       fail(error);
       return data ?? [];
     },

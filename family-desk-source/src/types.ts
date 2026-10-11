@@ -151,6 +151,8 @@ export interface ClassWalletDeposit {
   esa_invoice_id: string | null;
   note: string | null;
   confirmed_at: string | null;
+  order_no?: string | null;
+  order?: { student: string; order_date: string; child_id: string | null; family_id: string | null } | null;
 }
 
 export interface TrainerPay {

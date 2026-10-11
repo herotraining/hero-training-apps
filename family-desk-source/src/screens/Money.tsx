@@ -38,7 +38,13 @@ export function Money() {
   // ClassWallet pays one bank deposit per order, net of 2%. Line each new deposit up with the open invoices for the same amount.
   const openForMatch = (inv ?? []).filter((i) => (i.status === "sent" || i.status === "submitted") && !deposits.some((d) => d.status === "confirmed" && d.esa_invoice_id === i.id));
   const newDeposits = deposits.filter((d) => d.status === "new");
-  const matched = newDeposits.map((d) => ({ deposit: d, candidates: openForMatch.filter((i) => i.amount_cents === d.gross_cents) })).filter((m) => m.candidates.length > 0);
+  // A ClassWallet receipt, when there is one, names the student: keep only that child's invoices.
+  const matched = newDeposits.map((d) => {
+    const same = openForMatch.filter((i) => i.amount_cents === d.gross_cents);
+    const childId = d.order?.child_id;
+    const named = childId ? same.filter((i) => i.child_id === childId) : [];
+    return { deposit: d, candidates: childId ? named : same };
+  }).filter((m) => m.candidates.length > 0);
   const unmatched = newDeposits.filter((d) => !matched.some((m) => m.deposit.id === d.id));
   const byDay = new Map<string, ClassWalletDeposit[]>();
   for (const d of deposits) byDay.set(d.on_date, [...(byDay.get(d.on_date) ?? []), d]);
@@ -111,8 +117,8 @@ export function Money() {
                 {matched.map(({ deposit, candidates }) => (
                   <li key={deposit.id}>
                     <div className="item">
-                      <span className="n">{money(deposit.gross_cents)} on {dateWords(deposit.on_date)}</span>
-                      <span className="k">{money(deposit.net_cents)} landed in the bank after ClassWallet's {money(deposit.fee_cents)} fee. {candidates.length === 1 ? "One open invoice matches:" : `${candidates.length} open invoices match; check ClassWallet for the student, then pick:`}</span>
+                      <span className="n">{money(deposit.gross_cents)} on {dateWords(deposit.on_date)}{deposit.order ? ` · ${deposit.order.student}` : ""}</span>
+                      <span className="k">{money(deposit.net_cents)} landed in the bank after ClassWallet's {money(deposit.fee_cents)} fee. {deposit.order ? `ClassWallet's receipt names ${deposit.order.student} (order of ${dateWords(deposit.order.order_date)}).` : candidates.length === 1 ? "One open invoice matches:" : `${candidates.length} open invoices match; check ClassWallet for the student, then pick:`}</span>
                       <span className="p" style={{ flexDirection: "column", alignItems: "flex-end" }}>
                         {candidates.map((c) => (
                           <button key={c.id} className="btn small" onClick={() => setConfirming({ deposit, invoice: c })}>{candidates.length === 1 ? "Mark paid: " : ""}{c.child?.first_name} {c.child?.last_name}, {monthWords(c.class_month.slice(0, 7))}</button>
@@ -135,7 +141,7 @@ export function Money() {
                 </div>
               ))}
               {days.length > 5 && <div className="row" style={{ marginTop: 8 }}><button className="linkbtn" onClick={() => setShowAllDeposits((v) => !v)}>{showAllDeposits ? "Show fewer days" : `Show all ${days.length} days`}</button></div>}
-              <p className="hint">Read from the bank feed each morning. ClassWallet pays one deposit per order and keeps 2%; the family's name is not on the deposit, so when more than one invoice matches, check the order in ClassWallet first.</p>
+              <p className="hint">Read from the bank feed each morning. ClassWallet pays one deposit per order and keeps 2%. The bank line carries no name; when ClassWallet emailed a receipt for the order, the student's name is shown and only that child's invoices are offered. Otherwise check the order in ClassWallet first.</p>
             </div>
           </div>
         )}

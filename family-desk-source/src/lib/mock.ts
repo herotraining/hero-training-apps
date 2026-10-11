@@ -93,7 +93,7 @@ let feed: FeedItem[] = [
   { id: "fd3", kind: "email", source_id: "t3", title: "Tuesday co-op?", summary: "New family asking whether the Peoria Tuesday co-op has room for two children, ages 7 and 9.", from_name: "Jordan Nguyen", from_email: "jordan@example.com", family_id: null, link: "https://mail.google.com/", last_message_at: "2026-10-10T16:12:00Z", status: "open", done_at: null },
 ];
 let deposits: ClassWalletDeposit[] = [
-  { id: "cw1", bank_txn_id: "b1", on_date: "2026-10-09", net_cents: 24500, gross_cents: 25000, fee_cents: 500, status: "new", esa_invoice_id: null, note: null, confirmed_at: null },
+  { id: "cw1", bank_txn_id: "b1", on_date: "2026-10-09", net_cents: 24500, gross_cents: 25000, fee_cents: 500, status: "new", esa_invoice_id: null, note: null, confirmed_at: null, order_no: "36246047", order: { student: "Emery Ellis", order_date: "2026-10-07", child_id: "ce1", family_id: "fe" } },
   { id: "cw2", bank_txn_id: "b2", on_date: "2026-10-09", net_cents: 21560, gross_cents: 22000, fee_cents: 440, status: "new", esa_invoice_id: null, note: null, confirmed_at: null },
   { id: "cw3", bank_txn_id: "b3", on_date: "2026-10-09", net_cents: 21560, gross_cents: 22000, fee_cents: 440, status: "new", esa_invoice_id: null, note: null, confirmed_at: null },
   { id: "cw4", bank_txn_id: "b4", on_date: "2026-10-09", net_cents: 9310, gross_cents: 9500, fee_cents: 190, status: "new", esa_invoice_id: null, note: null, confirmed_at: null },

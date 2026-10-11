@@ -52,7 +52,7 @@ export function Families({ staff }: { staff: Staff }) {
             <div className="chips" role="group" aria-label="Site">
               <button className="chipbtn" aria-pressed={site === ""} onClick={() => setSite("")}>All sites</button>
               {siteIds.map((id) => <button key={id} className="chipbtn" aria-pressed={site === id} onClick={() => setSite(id)}>{siteName(id)}</button>)}
-              {leftCount > 0 && <button className="chipbtn" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>Left HERO ({leftCount})</button>}
+              {leftCount > 0 && <button className="chipbtn" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>Inactive ({leftCount})</button>}
               <span className="hint" style={{ alignSelf: "center" }}>{rows.length} {rows.length === 1 ? "family" : "families"}</span>
             </div>
           )}
@@ -69,12 +69,12 @@ export function Families({ staff }: { staff: Staff }) {
                     <a className="item" href={href.family(f.id)}>
                       <span className="n">{f.name}</span>
                       <span className="k">{kids.length ? kids.join(" and ") : "No children yet"} · {siteName(f.site_id)}</span>
-                      <span className="p">{f.status === "left" ? <Tag kind="warn">Left</Tag> : <>{waits && <Tag>Waitlist</Tag>}<Tag kind={kind}>{label}</Tag></>}</span>
+                      <span className="p">{f.status === "left" ? <Tag kind="warn">Inactive</Tag> : <>{waits && <Tag>Waitlist</Tag>}<Tag kind={kind}>{label}</Tag></>}</span>
                     </a>
                   </li>
                 );
               })}
-              {rows.length === 0 && <li className="empty">{fams.length === 0 ? "No families yet." : q ? `No family or child matches "${q}". Check the spelling, or search by a parent's name.` : "No active families here. Tap Left HERO to see families who left."}</li>}
+              {rows.length === 0 && <li className="empty">{fams.length === 0 ? "No families yet." : q ? `No family or child matches "${q}". Check the spelling, or search by a parent's name.` : "No active families here. Tap Inactive to see families who are no longer enrolled."}</li>}
             </ul>
           )}
         </div>

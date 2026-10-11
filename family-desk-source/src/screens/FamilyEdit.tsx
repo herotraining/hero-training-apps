@@ -102,7 +102,7 @@ export function FamilyDialog({ open, onClose, family, sites, lockSite, onSaved }
       <label className="chk"><input type="checkbox" name="text_consent" defaultChecked={family?.text_consent ?? true} /> Okay to text this family</label>
       {!isNew && (
         <div className="field" style={{ marginTop: 12 }}><label htmlFor="status">Status</label>
-          <select id="status" name="status" defaultValue={family?.status ?? "active"}><option value="active">Active</option><option value="paused">Paused</option><option value="left">Left HERO</option></select>
+          <select id="status" name="status" defaultValue={family?.status ?? "active"}><option value="active">Active</option><option value="paused">Paused</option><option value="left">Inactive</option></select>
         </div>
       )}
       <div className="field"><label htmlFor="notes">Notes for staff</label><textarea id="notes" name="notes" defaultValue={family?.notes ?? ""} placeholder="Anything the front desk should know" /></div>
@@ -154,7 +154,7 @@ export function ChildDialog({ open, onClose, family, child, sites, houses, onSav
         <div className="field"><label htmlFor="uniform_size">Uniform size</label><input id="uniform_size" name="uniform_size" list="sizes" defaultValue={child?.uniform_size ?? ""} placeholder="YM" /><datalist id="sizes">{SIZES.map((h) => <option key={h} value={h} />)}</datalist></div>
       </div>
       <label className="chk"><input type="checkbox" name="esa" defaultChecked={child?.esa ?? family.pay_method !== "private"} /> Has an Arizona ESA account</label>
-      {child && <label className="chk"><input type="checkbox" defaultChecked={child.active} onChange={(e) => { (e.currentTarget.form!.elements.namedItem("active_mirror") as HTMLInputElement).value = e.currentTarget.checked ? "on" : "off"; }} /> Still at HERO (untick when the child has left)</label>}
+      {child && <label className="chk"><input type="checkbox" defaultChecked={child.active} onChange={(e) => { (e.currentTarget.form!.elements.namedItem("active_mirror") as HTMLInputElement).value = e.currentTarget.checked ? "on" : "off"; }} /> Active (untick when the child is no longer enrolled)</label>}
       {child && <input type="hidden" name="active_mirror" defaultValue={child.active ? "on" : "off"} />}
     </EditForm>
   );

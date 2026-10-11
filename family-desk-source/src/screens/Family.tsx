@@ -94,14 +94,14 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
     <>
       <Band>
         <a className="back" href={href.families}>Back to families</a>
-        <h1>{fam.name}{fam.status !== "active" ? <span className="hint" style={{ color: "inherit", opacity: .8 }}> · {fam.status === "left" ? "left HERO" : fam.status}</span> : null}</h1>
+        <h1>{fam.name}{fam.status !== "active" ? <span className="hint" style={{ color: "inherit", opacity: .8 }}> · {fam.status === "left" ? "inactive" : fam.status}</span> : null}</h1>
         <p className="contact">
           {primary ? `${primary.name}${primary.mobile ? `, ${primary.mobile}` : ""}${primary.email ? `, ${primary.email}` : ""}` : "No parent or guardian on file"}
           {others.length ? ` · also ${others.map((g) => g.name).join(", ")}` : ""}
         </p>
         <div className="row"><Tag kind={fam.pay_method === "esa" ? "esa" : fam.pay_method === "split" ? "gold" : undefined}>{PAYWORDS[fam.pay_method]}</Tag><span className="contact">{siteName(fam.site_id)}{fam.city && fam.city.toLowerCase() !== siteName(fam.site_id).toLowerCase() ? `, lives in ${fam.city}` : ""}{fam.text_consent ? " · okay to text" : " · no texts"}</span></div>
-        {canEdit && <div className="row" style={{ marginTop: 6 }}><button className="btn quiet small" onClick={() => setOpen({ kind: "family" })}>{fam.status === "left" ? "Edit family / welcome back" : "Edit family"}</button><button className="btn quiet small" onClick={() => setOpen({ kind: "child", child: null })}>Add a child</button></div>}
-        {fam.status === "left" && <p className="contact" style={{ marginTop: 8 }}>Returning? Set the status to Active under Edit family, then tick each child's "Still at HERO" and enroll them.</p>}
+        {canEdit && <div className="row" style={{ marginTop: 6 }}><button className="btn quiet small" onClick={() => setOpen({ kind: "family" })}>{fam.status === "left" ? "Edit family / make active" : "Edit family"}</button><button className="btn quiet small" onClick={() => setOpen({ kind: "child", child: null })}>Add a child</button></div>}
+        {fam.status === "left" && <p className="contact" style={{ marginTop: 8 }}>Coming back? Set the status to Active under Edit family, then tick each returning child's "Active" box and enroll them.</p>}
       </Band>
       <div className="page">
         <ErrorBox error={error} />
@@ -113,7 +113,7 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
           <div className="kids">
             {kids.map((c) => (
               <div key={c.id} className={"kid" + (c.active ? "" : " off")}>
-                <div className="nm">{c.first_name} {c.last_name}{!c.active && <Tag kind="warn">Left</Tag>}</div>
+                <div className="nm">{c.first_name} {c.last_name}{!c.active && <Tag kind="warn">Inactive</Tag>}</div>
                 <div className="meta">{ageWords(c.birth_date)}{c.house ? `, House ${c.house}` : ""}{c.uniform_size ? `, uniform ${c.uniform_size}` : ""}{c.site_id !== fam.site_id ? `, ${siteName(c.site_id)}` : ""}{c.esa ? ", ESA" : ""}</div>
                 <ul>
                   {openEnrollments(c).map((e) => (

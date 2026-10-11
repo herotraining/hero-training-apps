@@ -202,3 +202,5 @@ dialog::backdrop{background:rgba(8,18,40,.55)}
   .toast{bottom:84px}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+.list.feed .n{font-size:1.15rem}
+.list.feed .p{gap:8px}

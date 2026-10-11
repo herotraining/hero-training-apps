@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import type { Attendance, Closure, EsaInvoice, Program, RosterRow, Site, Staff } from "../types";
+import type { Attendance, Closure, EsaInvoice, FeedItem, Program, RosterRow, Site, Staff } from "../types";
 import { ageBand, ageOn, ageWords, arizonaNow, arizonaToday, dateWords, monthWords, timeWords, WEEKDAYS, money, siteName } from "../lib/util";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
 import { href } from "../router";
@@ -20,6 +20,7 @@ export function Today({ staff }: { staff: Staff }) {
   const [closures, setClosures] = useState<Closure[]>([]);
   const [marks, setMarks] = useState<Map<string, Attendance["status"]>>(new Map());
   const [needs, setNeeds] = useState<EsaInvoice[]>([]);
+  const [feed, setFeed] = useState<FeedItem[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [editing, setEditing] = useState<Closure | null | "new">(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,8 +41,8 @@ export function Today({ staff }: { staff: Staff }) {
         setRosters(r); setClosures(c);
         setMarks(new Map(at.map((x) => [x.enrollment_id, x.status])));
         if (canMoney) {
-          const [inv, s] = await Promise.all([a.esaInvoices(), a.sites()]);
-          setSites(s);
+          const [inv, s, f] = await Promise.all([a.esaInvoices(), a.sites(), a.feed().catch(() => [] as FeedItem[])]);
+          setSites(s); setFeed(f);
           setNeeds(inv.filter((i) => (i.status === "sent" || i.status === "submitted") && i.class_month <= today).concat(inv.filter((i) => i.status === "rejected")));
         }
       } catch (e) { setError((e as Error).message); }
@@ -55,6 +56,12 @@ export function Today({ staff }: { staff: Staff }) {
     setMarks((m) => { const n = new Map(m); if (next) n.set(r.enrollment.id, next); else n.delete(r.enrollment.id); return n; });
     try { const a = await api(); await a.markAttendance(r.enrollment.id, today, next); }
     catch (e) { setMarks(before); setError((e as Error).message); }
+  }
+
+  async function feedDone(item: FeedItem) {
+    setFeed((f) => f.filter((x) => x.id !== item.id));
+    try { const a = await api(); await a.setFeedStatus(item.id, "done"); show("Ticked off."); }
+    catch (err) { setFeed((f) => [item, ...f]); setError((err as Error).message); }
   }
 
   async function onClosure(e: FormEvent<HTMLFormElement>) {
@@ -106,6 +113,27 @@ export function Today({ staff }: { staff: Staff }) {
                 </a></li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {canMoney && feed.length > 0 && (
+          <div className="section">
+            <h2>Inbox: {feed.length} {feed.length === 1 ? "email needs" : "emails need"} a reply</h2>
+            <ul className="list feed">
+              {feed.map((f) => (
+                <li key={f.id}>
+                  <div className="item">
+                    <span className="n">{f.family_id ? <a href={href.family(f.family_id)}>{f.from_name ?? f.from_email}</a> : (f.from_name ?? f.from_email)}{f.family_id ? "" : <span className="hint"> · not a family on file</span>}</span>
+                    <span className="k">{f.title}{f.summary ? ` — ${f.summary}` : ""}</span>
+                    <span className="p row">
+                      {f.link && <a className="btn quiet small" href={f.link} target="_blank" rel="noreferrer">Open in Gmail</a>}
+                      <button className="btn quiet small" onClick={() => feedDone(f)}>Done</button>
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="hint">Found by the morning sweep of the front-desk inbox. Reply in Gmail, then tap Done; anything a parent writes back reopens here the next morning.</p>
           </div>
         )}
 

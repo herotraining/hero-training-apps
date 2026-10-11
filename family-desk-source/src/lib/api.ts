@@ -1,5 +1,5 @@
 // One data layer with two backs: Supabase for real use, built-in made-up data when VITE_MOCK=1.
-import type { JackrabbitLine, Attendance, CareInput, Child, ChildInput, Closure, ClosureInput, EnrollmentInput, EsaInvoice, Family, FamilyInput, GuardianInput, Program, ProgramInput, Profile, RosterRow, Site, Staff, StripePicture } from "../types";
+import type { JackrabbitLine, Attendance, CareInput, Child, ChildInput, ClassWalletDeposit, Closure, ClosureInput, EnrollmentInput, EsaInvoice, Family, FamilyInput, FeedItem, GuardianInput, Program, ProgramInput, Profile, RosterRow, Site, Staff, StripePicture, TrainerPay } from "../types";
 
 export interface Api {
   mock: boolean;
@@ -28,7 +28,12 @@ export interface Api {
   esaInvoices(): Promise<EsaInvoice[]>;
   stripeFamily(familyId: string): Promise<StripePicture>;
   createEsaInvoices(classMonth: string, familyId?: string): Promise<{ class_month: string; created: any[]; skipped: any[] }>;
-  markEsaPaid(id: string, reason: string): Promise<void>;
+  markEsaPaid(id: string, reason: string, classwalletDepositId?: string): Promise<void>;
+  feed(): Promise<FeedItem[]>;
+  setFeedStatus(id: string, status: FeedItem["status"]): Promise<void>;
+  classwalletDeposits(sinceIso: string): Promise<ClassWalletDeposit[]>;
+  setDepositStatus(id: string, status: ClassWalletDeposit["status"], note?: string | null): Promise<void>;
+  trainerPay(sinceIso: string): Promise<TrainerPay[]>;
   staff(): Promise<Staff[]>;
   addStaff(s: { email: string; name: string; role: Staff["role"]; site_id: string | null }): Promise<void>;
   setStaffActive(id: string, active: boolean): Promise<void>;

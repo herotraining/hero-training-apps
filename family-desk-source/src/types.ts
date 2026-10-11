@@ -124,6 +124,46 @@ export interface EsaInvoice {
 
 export interface Closure { id: string; site_id: string | null; on_date: string; title: string; note: string | null }
 
+// Left by the morning sweep (Claude's daily read-only pass over the front-desk inbox and the bank feed).
+export interface FeedItem {
+  id: string;
+  kind: "email";
+  source_id: string;
+  title: string;
+  summary: string | null;
+  from_name: string | null;
+  from_email: string | null;
+  family_id: string | null;
+  link: string | null;
+  last_message_at: string | null;
+  status: "open" | "done";
+  done_at: string | null;
+}
+
+export interface ClassWalletDeposit {
+  id: string;
+  bank_txn_id: string;
+  on_date: string;
+  net_cents: number;
+  gross_cents: number;
+  fee_cents: number;
+  status: "new" | "confirmed" | "ignored";
+  esa_invoice_id: string | null;
+  note: string | null;
+  confirmed_at: string | null;
+}
+
+export interface TrainerPay {
+  id: string;
+  paid_on: string;
+  payee: string;
+  amount_cents: number;
+  memo: string | null;
+  period: string | null;
+  hours: number | null;
+  kind: "trainer" | "facility" | "other";
+}
+
 export interface StripePicture {
   family: string;
   customer?: string;

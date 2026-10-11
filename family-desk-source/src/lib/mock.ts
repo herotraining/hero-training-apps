@@ -1,6 +1,6 @@
 // Made-up data mirroring the practice families, for screenshots and design work without a sign-in.
 import type { Api } from "./api";
-import type { Child, Enrollment, EsaInvoice, Family, JackrabbitLine, Program, RosterRow, Staff } from "../types";
+import type { Child, ClassWalletDeposit, Enrollment, EsaInvoice, Family, FeedItem, JackrabbitLine, Program, RosterRow, Staff, TrainerPay } from "../types";
 
 const sites = [
   { id: "peoria", name: "Peoria", gym: "Oasis Gymnastics", city: "Peoria" },
@@ -87,9 +87,30 @@ const esa: EsaInvoice[] = [
   { id: "ie", child_id: "ce1", class_month: "2026-12-01", amount_cents: 25000, stripe_invoice_id: "in_E", hosted_invoice_url: "https://invoice.stripe.com/", status: "sent", sent_at: "2026-10-03", paid_at: null, notes: null, child: { first_name: "Emery", last_name: "Ellis", family_id: "fe", site_id: "mesa", family: { name: "Test Family E" } } },
 ];
 
+let feed: FeedItem[] = [
+  { id: "fd1", kind: "email", source_id: "t1", title: "Re: December statement", summary: "Asks for the December invoice as a PDF so she can upload it to ClassWallet.", from_name: "Alex Anderson", from_email: "alex@example.com", family_id: "fa", link: "https://mail.google.com/", last_message_at: "2026-10-11T13:05:00Z", status: "open", done_at: null },
+  { id: "fd2", kind: "email", source_id: "t2", title: "Invoice rejected again", summary: "ClassWallet sent the November invoice back; asks what to change.", from_name: "Casey Carter", from_email: "casey@example.com", family_id: "fc", link: "https://mail.google.com/", last_message_at: "2026-10-10T22:40:00Z", status: "open", done_at: null },
+  { id: "fd3", kind: "email", source_id: "t3", title: "Tuesday co-op?", summary: "New family asking whether the Peoria Tuesday co-op has room for two children, ages 7 and 9.", from_name: "Jordan Nguyen", from_email: "jordan@example.com", family_id: null, link: "https://mail.google.com/", last_message_at: "2026-10-10T16:12:00Z", status: "open", done_at: null },
+];
+let deposits: ClassWalletDeposit[] = [
+  { id: "cw1", bank_txn_id: "b1", on_date: "2026-10-09", net_cents: 24500, gross_cents: 25000, fee_cents: 500, status: "new", esa_invoice_id: null, note: null, confirmed_at: null },
+  { id: "cw2", bank_txn_id: "b2", on_date: "2026-10-09", net_cents: 21560, gross_cents: 22000, fee_cents: 440, status: "new", esa_invoice_id: null, note: null, confirmed_at: null },
+  { id: "cw3", bank_txn_id: "b3", on_date: "2026-10-09", net_cents: 21560, gross_cents: 22000, fee_cents: 440, status: "new", esa_invoice_id: null, note: null, confirmed_at: null },
+  { id: "cw4", bank_txn_id: "b4", on_date: "2026-10-09", net_cents: 9310, gross_cents: 9500, fee_cents: 190, status: "new", esa_invoice_id: null, note: null, confirmed_at: null },
+  { id: "cw5", bank_txn_id: "b5", on_date: "2026-10-07", net_cents: 24500, gross_cents: 25000, fee_cents: 500, status: "confirmed", esa_invoice_id: "id", note: null, confirmed_at: "2026-10-07T16:00:00Z" },
+  { id: "cw6", bank_txn_id: "b6", on_date: "2026-10-06", net_cents: 21560, gross_cents: 22000, fee_cents: 440, status: "new", esa_invoice_id: null, note: null, confirmed_at: null },
+];
+const pay: TrainerPay[] = [
+  { id: "p1", paid_on: "2026-10-01", payee: "Zoe Zimmer", amount_cents: 40000, memo: "Hero Training Paycheck 9/16-9/30 16hrs", period: "9/16-9/30", hours: 16, kind: "trainer" },
+  { id: "p2", paid_on: "2026-10-01", payee: "Kai Kim", amount_cents: 27000, memo: "Hero Training Paycheck 9/16-9/30 9hrs", period: "9/16-9/30", hours: 9, kind: "trainer" },
+  { id: "p3", paid_on: "2026-10-01", payee: "Oasis Gymnastics", amount_cents: 60000, memo: "October facility usage fee", period: null, hours: null, kind: "facility" },
+  { id: "p4", paid_on: "2026-09-16", payee: "Zoe Zimmer", amount_cents: 40000, memo: "Hero Trainer paycheck 9/1-9/15 16hrs", period: "9/1-9/15", hours: 16, kind: "trainer" },
+  { id: "p5", paid_on: "2026-09-16", payee: "Kai Kim", amount_cents: 54000, memo: "Hero Trainer paycheck 9/1-9/15 18hrs", period: "9/1-9/15", hours: 18, kind: "trainer" },
+];
+
 let staff: Staff[] = [
   { id: "s1", user_id: "u1", email: "mike@example.com", name: "Mike", role: "owner", site_id: null, active: true },
-  { id: "s2", user_id: null, email: "lisa@example.com", name: "Lisa", role: "admin", site_id: null, active: true },
+  { id: "s2", user_id: null, email: "lisa@example.com", name: "Lisa", role: "owner", site_id: null, active: true },
   { id: "s3", user_id: null, email: "mary@example.com", name: "Mary", role: "admin", site_id: "mesa", active: true },
   { id: "s4", user_id: null, email: "zoe@example.com", name: "Zoe", role: "coach", site_id: null, active: true },
 ];
@@ -181,7 +202,15 @@ export function mockApi(): Api {
       };
     },
     async createEsaInvoices(classMonth) { await sleep(300); return { class_month: classMonth, created: [{ student: "Avery A", family: "Test Family A", amount: 25000, invoice: "in_new", url: "https://invoice.stripe.com/" }], skipped: [{ student: "Drew D", why: "already has an invoice for this month" }] }; },
-    async markEsaPaid(id) { const i = esa.find((x) => x.id === id); if (i) { i.status = "paid"; i.paid_at = new Date().toISOString(); } },
+    async markEsaPaid(id, _reason, depositId) {
+      const i = esa.find((x) => x.id === id); if (i) { i.status = "paid"; i.paid_at = new Date().toISOString(); }
+      if (depositId) deposits = deposits.map((d) => (d.id === depositId ? { ...d, status: "confirmed", esa_invoice_id: id, confirmed_at: new Date().toISOString() } : d));
+    },
+    async feed() { await sleep(60); return feed.filter((f) => f.status === "open"); },
+    async setFeedStatus(id, status) { feed = feed.map((f) => (f.id === id ? { ...f, status, done_at: status === "done" ? new Date().toISOString() : null } : f)); },
+    async classwalletDeposits(sinceIso) { await sleep(60); return deposits.filter((d) => d.on_date >= sinceIso); },
+    async setDepositStatus(id, status, note) { deposits = deposits.map((d) => (d.id === id ? { ...d, status, note: note === undefined ? d.note : note } : d)); },
+    async trainerPay(sinceIso) { await sleep(60); return pay.filter((p) => p.paid_on >= sinceIso); },
     async staff() { return staff; },
     async addStaff(s) { staff = [...staff, { id: `s${staff.length + 1}`, user_id: null, active: true, ...s }]; },
     async setStaffActive(id, active) { staff = staff.map((s) => (s.id === id ? { ...s, active } : s)); },

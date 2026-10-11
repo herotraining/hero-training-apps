@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import type { Program, Site, Staff } from "../types";
+import type { Program, Site, Staff, TrainerPay } from "../types";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
-import { WEEKDAYS, siteName } from "../lib/util";
+import { WEEKDAYS, arizonaNow, dateWords, money, siteName } from "../lib/util";
 
 const ROLE_WORDS: Record<Staff["role"], string> = { owner: "Owner", admin: "Admin", site_lead: "Site lead", coach: "Coach" };
 
@@ -16,13 +16,22 @@ export function StaffScreen() {
   const [editing, setEditing] = useState<Staff | null>(null);
   const [handoff, setHandoff] = useState<{ name: string; email: string; password: string; kind: "create" | "reset" } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pay, setPay] = useState<TrainerPay[]>([]);
+  const [payOpen, setPayOpen] = useState(false);
   const [toast, show] = useToast();
+  const year = arizonaNow().getFullYear();
 
   async function load() {
     const a = await api();
-    const [s, si, p, ca] = await Promise.all([a.staff(), a.sites(), a.programs(), a.coachAssignments()]);
-    setStaff(s); setSites(si); setPrograms(p); setAssign(ca);
+    const [s, si, p, ca, tp] = await Promise.all([a.staff(), a.sites(), a.programs(), a.coachAssignments(), a.trainerPay(`${year}-01-01`).catch(() => [] as TrainerPay[])]);
+    setStaff(s); setSites(si); setPrograms(p); setAssign(ca); setPay(tp);
   }
+  // Per person this year, from the Venmo receipts the morning sweep reads (owners only; the table is empty for anyone else).
+  const payByPerson = [...pay.reduce((m, r) => {
+    const cur = m.get(r.payee) ?? { payee: r.payee, kind: r.kind, total: 0, n: 0, hours: 0, last: r.paid_on };
+    cur.total += r.amount_cents; cur.n += 1; cur.hours += r.hours ?? 0; if (r.paid_on > cur.last) cur.last = r.paid_on;
+    return m.set(r.payee, cur);
+  }, new Map<string, { payee: string; kind: TrainerPay["kind"]; total: number; n: number; hours: number; last: string }>()).values()].sort((a, b) => b.total - a.total);
   useEffect(() => { load().catch((e) => setError(e.message)); }, []);
 
   async function onAdd(e: FormEvent<HTMLFormElement>) {
@@ -100,6 +109,24 @@ export function StaffScreen() {
           </ul>
         )}
         <p className="hint" style={{ marginTop: 16 }}>Owners see everything. Admins handle families and money (pin one to a site, like Mary for Mesa). Site leads see their site's rosters. Coaches see their own programs' rosters, with care notes on class day only.</p>
+
+        {pay.length > 0 && (
+          <div className="section">
+            <div className="row between"><h2 style={{ margin: 0 }}>Paid by Venmo, {year}</h2><button className="linkbtn" onClick={() => setPayOpen((v) => !v)}>{payOpen ? "Hide" : "Show"}</button></div>
+            {payOpen && (
+              <div className="pane" style={{ marginTop: 10 }}>
+                {payByPerson.map((p) => (
+                  <div key={p.payee} className="line">
+                    <span>{p.payee}<span className="hint" style={{ display: "block" }}>{p.kind === "facility" ? "facility fees" : p.kind === "trainer" ? "trainer pay" : "other"} · {p.n} {p.n === 1 ? "payment" : "payments"}{p.hours ? ` · ${p.hours} hours` : ""} · last {dateWords(p.last)}</span></span>
+                    <span className="v">{money(p.total)}</span>
+                  </div>
+                ))}
+                <div className="line"><span><b>Total</b></span><span className="v"><b>{money(pay.reduce((n, r) => n + r.amount_cents, 0))}</b></span></div>
+                <p className="hint">From the Venmo receipts in the front-desk inbox, read by the morning sweep; the same lines are categorized in SuperBooks. Owners only. This is what the accountant needs for 1099s.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <Dialog open={adding} onClose={() => setAdding(false)}>

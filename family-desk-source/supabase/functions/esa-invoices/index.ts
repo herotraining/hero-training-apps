@@ -128,6 +128,12 @@ Deno.serve(async (req: Request) => {
       }
       const { data: updated, error: uerr } = await db.rpc("mark_esa_paid", { p_id: id, p_reason: reason });
       if (uerr) return json({ error: `Stripe shows paid but Family Desk did not record it: ${uerr.message}` }, 500);
+      // When the payment was confirmed from a ClassWallet bank deposit, tie the deposit to the invoice (RLS: owners and admins).
+      const depositId = String(body.classwallet_deposit_id ?? "");
+      if (depositId) {
+        const { error: derr } = await db.from("classwallet_deposits").update({ status: "confirmed", esa_invoice_id: id }).eq("id", depositId).eq("status", "new");
+        if (derr) return json({ ok: true, invoice: updated, note: `Invoice marked paid, but the deposit was not tied to it: ${derr.message}` });
+      }
       return json({ ok: true, invoice: updated });
     }
 

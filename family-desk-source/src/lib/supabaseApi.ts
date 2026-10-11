@@ -159,7 +159,30 @@ export function supabaseApi(): Api {
     },
     stripeFamily: (familyId) => callFunction("stripe-family", { family_id: familyId }),
     createEsaInvoices: (classMonth, familyId) => callFunction("esa-invoices", { action: "create", class_month: classMonth, family_id: familyId }),
-    async markEsaPaid(id, reason) { await callFunction("esa-invoices", { action: "mark_paid", esa_invoice_id: id, reason }); },
+    async markEsaPaid(id, reason, classwalletDepositId) {
+      const r = await callFunction<{ ok: boolean; note?: string }>("esa-invoices", { action: "mark_paid", esa_invoice_id: id, reason, classwallet_deposit_id: classwalletDepositId });
+      if (r.note && classwalletDepositId) throw new Error(r.note);
+    },
+    async feed() {
+      const { data, error } = await sb.from("desk_feed").select("*").eq("status", "open").order("last_message_at", { ascending: false }).limit(50);
+      fail(error);
+      return data ?? [];
+    },
+    async setFeedStatus(id, status) { const { error } = await sb.from("desk_feed").update({ status }).eq("id", id); fail(error); },
+    async classwalletDeposits(sinceIso) {
+      const { data, error } = await sb.from("classwallet_deposits").select("*").gte("on_date", sinceIso).order("on_date", { ascending: false }).limit(400);
+      fail(error);
+      return data ?? [];
+    },
+    async setDepositStatus(id, status, note) {
+      const { error } = await sb.from("classwallet_deposits").update(note === undefined ? { status } : { status, note }).eq("id", id);
+      fail(error);
+    },
+    async trainerPay(sinceIso) {
+      const { data, error } = await sb.from("trainer_pay").select("id, paid_on, payee, amount_cents, memo, period, hours, kind").gte("paid_on", sinceIso).order("paid_on", { ascending: false }).limit(1000);
+      fail(error);
+      return data ?? [];
+    },
     async staff() { const { data, error } = await sb.from("staff").select("*").order("name"); fail(error); return data ?? []; },
     async addStaff(s) { const { error } = await sb.from("staff").insert(s); fail(error); },
     async setStaffActive(id, active) { const { error } = await sb.from("staff").update({ active }).eq("id", id); fail(error); },

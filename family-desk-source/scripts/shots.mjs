@@ -16,7 +16,7 @@ const server = createServer(async (req, res) => {
 });
 await new Promise((r) => server.listen(4173, r));
 
-const routes = [["today", "#/today"], ["families", "#/families"], ["family", "#/families/fb"], ["family-a", "#/families/fa"], ["money", "#/money"], ["staff", "#/staff"], ["programs", "#/programs"]];
+const routes = [["today", "#/today"], ["families", "#/families"], ["family", "#/families/fb"], ["family-a", "#/families/fa"], ["money", "#/money"], ["staff", "#/staff"], ["staff-pay", "#/staff", "text=Show"], ["programs", "#/programs"]];
 const sizes = [["phone", 390, 844], ["desktop", 1280, 860]];
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 for (const [sname, w, h] of sizes) {
@@ -25,9 +25,10 @@ for (const [sname, w, h] of sizes) {
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
-  for (const [name, hash] of routes) {
+  for (const [name, hash, click] of routes) {
     await page.goto(`http://localhost:4173/${hash}`, { waitUntil: "networkidle" });
     await page.waitForTimeout(500);
+    if (click) { await page.click(click); await page.waitForTimeout(300); }
     await page.screenshot({ path: join(out, `${name}-${sname}.png`), fullPage: true });
   }
   if (errors.length) console.log(sname, "console errors:", errors);

@@ -26,6 +26,7 @@ npm run dev            # against the real Supabase project
 VITE_MOCK=1 npm run dev  # built-in made-up families, no sign-in
 npm run build:pages    # the live app, into ../family-desk/ (commit and push that folder)
 npm run shots          # screenshots of the demo build in shots/
+npm test               # money tests: made-up data, in-memory database and Stripe, never the live project
 ```
 
 Database changes go in a new file under `supabase/migrations/` and are applied through the Supabase connector or CLI. Function changes are deployed the same way.

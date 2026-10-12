@@ -188,7 +188,24 @@ Deno.serve(async (req: Request) => {
       const { data: row, error } = await db.from("esa_invoices").select("id, stripe_invoice_id, status").eq("id", id).maybeSingle();
       if (error) return json({ error: error.message }, 400);
       if (!row) return json({ error: "Invoice not found, or not yours to change" }, 404);
-      if (row.status === "paid") return json({ ok: true, note: "Already paid" });
+      // When the payment was confirmed from a ClassWallet bank deposit, tie the deposit to the invoice (RLS: owners and
+      // admins). Only a deposit still "new" can be tied; one already confirmed or set aside is reported, not stolen.
+      const depositId = String(body.classwallet_deposit_id ?? "");
+      const tieDeposit = async (): Promise<string | null> => {
+        if (!depositId) return null;
+        const { data: tied, error: derr } = await db.from("classwallet_deposits").update({ status: "confirmed", esa_invoice_id: id }).eq("id", depositId).eq("status", "new").select("id");
+        if (derr) return `the deposit was not tied to it: ${derr.message}`;
+        if (!tied?.length) return "the deposit was not tied to it: it is no longer new (already confirmed or set aside), or not yours to change";
+        return null;
+      };
+      if (row.status === "paid") {
+        // Already recorded, by hand or an earlier call. A deposit given now still gets tied to it.
+        const miss = await tieDeposit();
+        return json({ ok: true, invoice: row, note: miss ? `Already paid, but ${miss}` : depositId ? undefined : "Already paid" });
+      }
+      if (!["sent", "submitted", "rejected"].includes(row.status)) {
+        return json({ error: `Invoice is ${row.status}; only a sent, submitted, or rejected invoice can be marked paid` }, 409);
+      }
       if (row.stripe_invoice_id) {
         const inv = await stripe(key, "GET", `/v1/invoices/${row.stripe_invoice_id}`);
         if (inv.status === "open") await stripe(key, "POST", `/v1/invoices/${row.stripe_invoice_id}/pay`, { paid_out_of_band: true });
@@ -196,12 +213,8 @@ Deno.serve(async (req: Request) => {
       }
       const { data: updated, error: uerr } = await db.rpc("mark_esa_paid", { p_id: id, p_reason: reason });
       if (uerr) return json({ error: `Stripe shows paid but Family Desk did not record it: ${uerr.message}` }, 500);
-      // When the payment was confirmed from a ClassWallet bank deposit, tie the deposit to the invoice (RLS: owners and admins).
-      const depositId = String(body.classwallet_deposit_id ?? "");
-      if (depositId) {
-        const { error: derr } = await db.from("classwallet_deposits").update({ status: "confirmed", esa_invoice_id: id }).eq("id", depositId).eq("status", "new");
-        if (derr) return json({ ok: true, invoice: updated, note: `Invoice marked paid, but the deposit was not tied to it: ${derr.message}` });
-      }
+      const miss = await tieDeposit();
+      if (miss) return json({ ok: true, invoice: updated, note: `Invoice marked paid, but ${miss}` });
       return json({ ok: true, invoice: updated });
     }
 

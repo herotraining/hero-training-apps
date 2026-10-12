@@ -1,0 +1,29 @@
+# Family Desk money tests and typecheck, on every pull request and on main. The tests use made-up data, an in-memory
+# database and a pretend Stripe; this workflow needs no secrets and never reaches the live project.
+name: Family Desk tests
+
+on:
+  pull_request:
+    paths: ["family-desk-source/**", ".github/workflows/family-desk-tests.yml"]
+  push:
+    branches: [main]
+    paths: ["family-desk-source/**", ".github/workflows/family-desk-tests.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: family-desk-source
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: family-desk-source/package-lock.json
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - run: npx tsc -p tsconfig.json --noEmit
+      - run: npm test

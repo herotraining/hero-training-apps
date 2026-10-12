@@ -1,7 +1,7 @@
 // A small in-memory stand-in for the Supabase client, covering only the query shapes the edge functions use:
 // from().select/insert/update/delete with eq, neq, is, in, single, maybeSingle, a head count, and rpc().
 // Embedded filters such as "children.family_id" read the joined row, like PostgREST's !inner joins.
-// It keeps the database rules the money code leans on: one ESA invoice per child per class month, and a uniform
+// It keeps the database rules the money code leans on: one live ESA invoice per child per class month, and a uniform
 // line lets go of its invoice when that invoice row is deleted. Row-level security is not modelled.
 
 type Row = Record<string, any>;
@@ -154,8 +154,9 @@ class Query implements PromiseLike<Result> {
 
     if (this.op === "insert") {
       const row = { id: newId(table), ...this.payload };
-      if (table === "esa_invoices" && rows.some((r) => r.child_id === row.child_id && r.class_month === row.class_month)) {
-        return { data: null, error: { message: 'duplicate key value violates unique constraint "esa_invoices_child_id_class_month_key"' } };
+      // Mirrors esa_invoices_live_child_month (migration 0016): one live invoice per child per month; void ones don't count.
+      if (table === "esa_invoices" && row.status !== "void" && rows.some((r) => r.child_id === row.child_id && r.class_month === row.class_month && r.status !== "void")) {
+        return { data: null, error: { message: 'duplicate key value violates unique constraint "esa_invoices_live_child_month"' } };
       }
       rows.push(row);
       return this.shape([row]);

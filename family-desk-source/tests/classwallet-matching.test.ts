@@ -1,18 +1,19 @@
-// ClassWallet receipts to bank deposits (app.link_classwallet_orders, migration 0012). The function's SQL is read
-// straight from the migration file and run in PGlite, a Postgres that lives inside the test process, over a few
+// ClassWallet receipts to bank deposits (app.link_classwallet_orders, migration 0012, revised in 0016). Every
+// definition of the function is read straight from the migration files and applied in order, so the test sees
+// what the live database would, and runs in PGlite, a Postgres that lives inside the test process, over a few
 // tables shaped like the real ones and filled with made-up families. Nothing connects to the live database.
 //
 // The rule under test: a receipt names the deposit with the same settled amount that lands 0 to 10 days after the
 // order, nearest first, one deposit per receipt. The receipt is also tied to a family and child where it can be.
-//
-// Tests written with it.fails describe what the code should do but currently doesn't: each one is a bug the tests
-// found. They pass while the bug is there; once it is fixed, switch them to plain it().
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-const migration = readFileSync(new URL("../supabase/migrations/20261011_0012_link_classwallet_orders.sql", import.meta.url), "utf8");
-const linkFunction = /create or replace function app\.link_classwallet_orders\(\)[\s\S]*?\nend \$\$;/.exec(migration)?.[0];
+const migrationsDir = new URL("../supabase/migrations/", import.meta.url);
+const linkFunctions = readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort().flatMap((f) => {
+  const m = /create or replace function app\.link_classwallet_orders\(\)[\s\S]*?\nend \$\$;/.exec(readFileSync(new URL(f, migrationsDir), "utf8"));
+  return m ? [m[0]] : [];
+});
 
 // Only the columns the function reads or writes, with the same names and types as the migrations.
 const schema = `
@@ -32,10 +33,10 @@ const schema = `
 
 let pg: PGlite;
 beforeAll(async () => {
-  expect(linkFunction, "could not find app.link_classwallet_orders in migration 0012").toBeTruthy();
+  expect(linkFunctions.length, "could not find app.link_classwallet_orders in any migration").toBeGreaterThan(0);
   pg = new PGlite();
   await pg.exec(schema);
-  await pg.exec(linkFunction!);
+  for (const fn of linkFunctions) await pg.exec(fn);
 });
 afterAll(async () => { await pg?.close(); });
 beforeEach(async () => {
@@ -236,9 +237,7 @@ describe("receipt to family and child", () => {
     expect((await order("CW-1")).family_id).toBe(fam);
   });
 
-  it.fails("BUG: matches a receipt whose parent email has capitals", async () => {
-    // Guardian emails are lowercased before comparing, but the receipt's parent_email is not, so a receipt for
-    // "Parent@Example.test" never finds its family.
+  it("matches a receipt whose parent email has capitals (fixed in migration 0016)", async () => {
     const fam = await family("Tester");
     await guardian(fam, "parent@example.test");
     await receipt("CW-1", 10, 24500, { parent_email: "Parent@Example.test" });

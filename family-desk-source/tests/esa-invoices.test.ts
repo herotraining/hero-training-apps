@@ -1,8 +1,5 @@
 // ESA invoices edge function (supabase/functions/esa-invoices): creating a class month's invoices and marking one
 // paid. Runs the real function against an in-memory database and a pretend Stripe, with made-up families only.
-//
-// Tests written with it.fails describe what the code should do but currently doesn't: each one is a bug the tests
-// found. They pass while the bug is there; once it is fixed, switch them to plain it().
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { FakeDb } from "./fakes/fakeDb";
 import { FakeStripe } from "./fakes/fakeStripe";
@@ -191,7 +188,7 @@ describe("create", () => {
   it("treats losing the race for the month's slot as already invoiced, without touching Stripe", async () => {
     const s = seed();
     s.enroll(s.ava, s.ninja);
-    db.failNext("esa_invoices", "insert", 'duplicate key value violates unique constraint "esa_invoices_child_id_class_month_key"');
+    db.failNext("esa_invoices", "insert", 'duplicate key value violates unique constraint "esa_invoices_live_child_month"');
     const r = await call({ action: "create", class_month: "2026-12" });
     expect(r.body.skipped).toEqual([{ student: "Ava T", why: "already has an invoice for this month" }]);
     expect(stripe.calls).toHaveLength(0);
@@ -206,14 +203,13 @@ describe("create", () => {
     expect(db.tables.esa_invoices.map((i) => i.class_month).sort()).toEqual(["2026-12-01", "2027-01-01"]);
   });
 
-  it.fails("BUG: a child whose invoice for the month was voided can be invoiced again", async () => {
-    // The function only counts invoices that aren't void as "already invoiced", but the table keeps
-    // unique (child_id, class_month), so the new row is refused and the child is skipped for good.
+  it("invoices a child again after their invoice for the month was voided (migration 0016)", async () => {
     const s = seed();
     s.enroll(s.ava, s.ninja);
     db.insertRow("esa_invoices", { child_id: s.ava.id, class_month: "2026-12-01", amount_cents: 18000, status: "void", stripe_invoice_id: "in_old" });
     const r = await call({ action: "create", class_month: "2026-12" });
     expect(r.body.created).toHaveLength(1);
+    expect(db.tables.esa_invoices.map((i) => i.status).sort()).toEqual(["sent", "void"]);
   });
 
   describe("uniforms bought on ESA", () => {
@@ -386,7 +382,7 @@ describe("mark_paid", () => {
   it("is a no-op on an invoice already paid", async () => {
     const { row } = openInvoice("paid");
     const r = await call({ action: "mark_paid", esa_invoice_id: row.id, reason: "Deposit seen" });
-    expect(r.body).toEqual({ ok: true, note: "Already paid" });
+    expect(r.body).toMatchObject({ ok: true, note: "Already paid", invoice: { id: row.id, status: "paid" } });
     expect(stripe.calls).toHaveLength(0);
     expect(db.rpcCalls.some((c) => c.name === "mark_esa_paid")).toBe(false);
   });
@@ -400,31 +396,35 @@ describe("mark_paid", () => {
     expect(stripe.invoices.get(inv.id)!.status).toBe("paid");
   });
 
-  it.fails("BUG: tells the caller when the deposit was already confirmed against another invoice", async () => {
-    // The deposit update only touches rows still "new". When none match, Supabase returns no error, so the
-    // function replies plain ok and the screen reports success while the deposit stays tied to the other invoice.
+  it("still marks the invoice paid, but says so, when the deposit was already confirmed against another invoice", async () => {
     const { row, deposit } = openInvoice();
     deposit.status = "confirmed";
     deposit.esa_invoice_id = "some-other-invoice";
     const r = await call({ action: "mark_paid", esa_invoice_id: row.id, reason: "Deposit seen", classwallet_deposit_id: deposit.id });
-    expect(r.body.note).toBeDefined();
+    expect(r.body.ok).toBe(true);
+    expect(row.status).toBe("paid");
+    expect(r.body.note).toMatch(/Invoice marked paid, but the deposit was not tied to it/);
+    // The other invoice keeps its deposit.
+    expect(db.find("classwallet_deposits", deposit.id)!.esa_invoice_id).toBe("some-other-invoice");
   });
 
-  it.fails("BUG: confirms the deposit when the invoice was already marked paid", async () => {
-    // "Already paid" returns before the deposit step, so a deposit confirmed from the Money screen for an invoice
-    // someone marked paid by hand stays "new" (and the screen shows the "Already paid" note as an error).
+  it("ties the deposit even when the invoice was already marked paid, without a note the screen would show as an error", async () => {
     const { row, deposit } = openInvoice("paid");
-    await call({ action: "mark_paid", esa_invoice_id: row.id, reason: "Deposit seen", classwallet_deposit_id: deposit.id });
+    const r = await call({ action: "mark_paid", esa_invoice_id: row.id, reason: "Deposit seen", classwallet_deposit_id: deposit.id });
+    expect(r.body).toMatchObject({ ok: true });
+    expect(r.body.note).toBeUndefined();
     expect(db.find("classwallet_deposits", deposit.id)).toMatchObject({ status: "confirmed", esa_invoice_id: row.id });
+    expect(stripe.calls).toHaveLength(0);
   });
 
-  it.fails("BUG: refuses a draft invoice with a clear 409 instead of claiming Stripe shows it paid", async () => {
-    // A draft row has no Stripe invoice yet, so the Stripe check is skipped; mark_esa_paid then refuses it and the
-    // reply is a 500 saying "Stripe shows paid but Family Desk did not record it", which isn't true.
-    const s = seed();
-    const row = db.insertRow("esa_invoices", { child_id: s.ava.id, class_month: "2026-12-01", amount_cents: 18000, status: "draft", stripe_invoice_id: null });
-    const r = await call({ action: "mark_paid", esa_invoice_id: row.id, reason: "Deposit seen" });
+  it.each(["draft", "void"])("refuses a %s invoice with a 409 before touching Stripe or the deposit", async (status) => {
+    const { inv, row, deposit } = openInvoice(status);
+    const r = await call({ action: "mark_paid", esa_invoice_id: row.id, reason: "Deposit seen", classwallet_deposit_id: deposit.id });
     expect(r.status).toBe(409);
-    expect(r.body.error).not.toMatch(/Stripe shows paid/);
+    expect(r.body.error).toMatch(new RegExp(`Invoice is ${status}`));
+    expect(row.status).toBe(status);
+    expect(stripe.invoices.get(inv.id)!.status).toBe("open");
+    expect(stripe.calls).toHaveLength(0);
+    expect(db.find("classwallet_deposits", deposit.id)!.status).toBe("new");
   });
 });

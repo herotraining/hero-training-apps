@@ -309,6 +309,8 @@ export function mockApi(): Api {
     async setCoachAssignments(staffId, programIds) { assignments = [...assignments.filter((a) => a.staff_id !== staffId), ...programIds.map((program_id) => ({ staff_id: staffId, program_id }))]; },
     async staffSignin(staffId, action) { if (action === "reset_2fa") return { ok: true, removed: 1 }; const st = staff.find((x) => x.id === staffId)!; if (action === "create") staff = staff.map((x) => (x.id === staffId ? { ...x, user_id: "u-" + x.id } : x)); return { ok: true, email: st.email, password: "maple-harbor-comet-42" }; },
     async changePassword() { await sleep(100); },
+    async kajabiStatus() { await sleep(80); return { configured: false, counts: { family: 0, staff: 0, errors: 0 }, to_grant: 9, to_revoke: 0 }; },
+    async kajabiSync() { await sleep(300); throw new Error("Kajabi isn't connected yet. Add KAJABI_CLIENT_ID and KAJABI_CLIENT_SECRET to Supabase secrets (Kajabi: Settings → Public API)."); },
     async auditRecent() { return [{ id: 1, at: new Date().toISOString(), actor_email: "lisa@example.com", action: "update", entity: "esa_invoices", entity_id: "id", reason: "ClassWallet deposit seen in bank" }]; },
   };
 }

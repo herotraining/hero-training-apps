@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import type { Program, Site, Staff, TrainerPay } from "../types";
+import type { KajabiStatus, Program, Site, Staff, TrainerPay } from "../types";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
 import { WEEKDAYS, arizonaNow, dateWords, money, siteName } from "../lib/util";
 
@@ -18,6 +18,8 @@ export function StaffScreen() {
   const [busy, setBusy] = useState(false);
   const [pay, setPay] = useState<TrainerPay[]>([]);
   const [payOpen, setPayOpen] = useState(false);
+  const [kajabi, setKajabi] = useState<KajabiStatus | null | "unreachable">(null);
+  const [syncing, setSyncing] = useState(false);
   const [toast, show] = useToast();
   const year = arizonaNow().getFullYear();
 
@@ -32,7 +34,21 @@ export function StaffScreen() {
     cur.total += r.amount_cents; cur.n += 1; cur.hours += r.hours ?? 0; if (r.paid_on > cur.last) cur.last = r.paid_on;
     return m.set(r.payee, cur);
   }, new Map<string, { payee: string; kind: TrainerPay["kind"]; total: number; n: number; hours: number; last: string }>()).values()].sort((a, b) => b.total - a.total);
-  useEffect(() => { load().catch((e) => setError(e.message)); }, []);
+  const loadKajabi = () => api().then((a) => a.kajabiStatus()).then(setKajabi).catch(() => setKajabi("unreachable"));
+  useEffect(() => { load().catch((e) => setError(e.message)); loadKajabi(); }, []);
+
+  async function syncKajabi() {
+    setSyncing(true); setError(null);
+    try {
+      const a = await api();
+      const r = await a.kajabiSync();
+      const bits = [r.granted.length ? `${r.granted.length} let in` : "", r.revoked.length ? `${r.revoked.length} closed` : "", r.failed.length ? `${r.failed.length} failed` : "", r.remaining ? `${r.remaining} more next run` : ""].filter(Boolean);
+      show(bits.length ? `Kajabi: ${bits.join(", ")}.` : "Kajabi is already in step.");
+      if (r.failed.length) setError(`Kajabi could not update: ${r.failed.map((f) => `${f.email} (${f.why})`).join("; ")}`);
+      await loadKajabi();
+    } catch (err) { setError((err as Error).message); }
+    finally { setSyncing(false); }
+  }
 
   async function onAdd(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -109,6 +125,28 @@ export function StaffScreen() {
           </ul>
         )}
         <p className="hint" style={{ marginTop: 16 }}>Owners see everything. Admins handle families and money (pin one to a site, like Mary for Mesa). Site leads see their site's rosters. Coaches see their own programs' rosters, with care notes on class day only.</p>
+
+        <div className="section">
+          <h2>Kajabi hubs</h2>
+          <div className="pane">
+            {kajabi === null && <p className="hint">Checking Kajabi…</p>}
+            {kajabi === "unreachable" && <p className="hint">The Kajabi sync can't be reached right now.</p>}
+            {kajabi && kajabi !== "unreachable" && (
+              <>
+                <p style={{ margin: 0 }}>
+                  <b>{kajabi.counts.family}</b> parent{kajabi.counts.family === 1 ? "" : "s"} in the Family Hub · <b>{kajabi.counts.staff}</b> in the Staff Hub
+                  {kajabi.counts.errors ? <> · <Tag kind="warn">{kajabi.counts.errors} with an error</Tag></> : null}
+                </p>
+                <p className="hint" style={{ marginTop: 4 }}>
+                  {kajabi.to_grant === 0 && kajabi.to_revoke === 0 ? "Everyone who should have access has it." : `${kajabi.to_grant} to let in, ${kajabi.to_revoke} to close.`}
+                  {" "}Every guardian of an active family with a child in a class gets the Family Hub and the Library; every active staff member gets the Staff Hub. Family Desk updates Kajabi a moment after a family, class or staff change; this runs it now.
+                </p>
+                {!kajabi.configured && <p className="notice small">Kajabi isn't connected yet. In Kajabi go to Settings → Public API, create credentials, and add them to Supabase as KAJABI_CLIENT_ID and KAJABI_CLIENT_SECRET. Nothing is granted until then.</p>}
+                <div className="row" style={{ marginTop: 10 }}><button className="btn quiet" disabled={syncing || !kajabi.configured} onClick={syncKajabi}>{syncing ? "Updating Kajabi…" : "Update Kajabi now"}</button></div>
+              </>
+            )}
+          </div>
+        </div>
 
         {pay.length > 0 && (
           <div className="section">

@@ -17,8 +17,8 @@ export const newId = (prefix = "row") => `${prefix}-${++seq}`;
 
 export class FakeDb {
   tables: Record<string, Row[]> = {
-    sites: [], families: [], guardians: [], children: [], programs: [], enrollments: [],
-    esa_invoices: [], store_items: [], store_sales: [], store_sale_lines: [], classwallet_deposits: [], uniform_requests: [],
+    sites: [], families: [], guardians: [], children: [], programs: [], enrollments: [], staff: [],
+    esa_invoices: [], store_items: [], store_sales: [], store_sale_lines: [], classwallet_deposits: [], uniform_requests: [], kajabi_access: [],
   };
   profile: Profile = { staff: { id: "staff-owner", role: "owner" }, aal: "aal2" };
   calls: { table: string; op: string; filters: Filter[]; payload?: any; trusted: boolean }[] = [];
@@ -131,12 +131,17 @@ export class FakeDb {
     if (table === "store_sales") return { lines: this.tables.store_sale_lines.filter((l) => l.sale_id === row.id).map((l) => ({ ...l })) };
     if (table === "guardians") return { families: this.find("families", row.family_id) ?? null };
     if (table === "children") return { enrollments: this.tables.enrollments.filter((e) => e.child_id === row.id).map((e) => ({ ...e })) };
+    if (table === "families") return {
+      guardians: this.tables.guardians.filter((g) => g.family_id === row.id).map((g) => ({ ...g })),
+      children: this.tables.children.filter((c) => c.family_id === row.id).map((c) => ({ ...c, ...this.embeds("children", c) })),
+    };
     return {};
   }
 }
 
 class Query implements PromiseLike<Result> {
-  private op: "select" | "insert" | "update" | "delete" = "select";
+  private op: "select" | "insert" | "update" | "delete" | "upsert" = "select";
+  private conflict: string[] = [];
   private filters: Filter[] = [];
   private payload: any;
   private returning = false;
@@ -152,6 +157,7 @@ class Query implements PromiseLike<Result> {
     return this;
   }
   insert(row: Row) { this.op = "insert"; this.payload = row; return this; }
+  upsert(row: Row | Row[], opts?: { onConflict?: string }) { this.op = "upsert"; this.payload = row; this.conflict = (opts?.onConflict ?? "id").split(",").map((c) => c.trim()); return this; }
   update(patch: Row) { this.op = "update"; this.payload = patch; return this; }
   delete() { this.op = "delete"; return this; }
   eq(col: string, val: any) { this.filters.push({ op: "eq", col, val }); return this; }
@@ -214,6 +220,16 @@ class Query implements PromiseLike<Result> {
       if (this.max !== null) found = found.slice(0, this.max);
       if (this.head) return { data: null, error: null, count: found.length };
       return this.shape(found);
+    }
+
+    if (this.op === "upsert") {
+      const made: Row[] = [];
+      for (const p of Array.isArray(this.payload) ? this.payload : [this.payload]) {
+        const had = rows.find((r) => this.conflict.every((c) => r[c] === p[c]));
+        if (had) { Object.assign(had, p); made.push(had); }
+        else { const row = { id: newId(table), ...p }; rows.push(row); made.push(row); }
+      }
+      return this.shape(made);
     }
 
     if (this.op === "insert") {

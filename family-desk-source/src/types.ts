@@ -240,4 +240,8 @@ export interface StripePicture {
 
 export interface RosterRow { child: Child; enrollment: Enrollment; family?: Family }
 
+// Kajabi hubs: who has access, and what a sync would change.
+export interface KajabiStatus { configured: boolean; counts: { family: number; staff: number; errors: number }; to_grant: number; to_revoke: number }
+export interface KajabiSyncResult { ok: boolean; granted: string[]; revoked: string[]; failed: { email: string; why: string }[]; remaining: number }
+
 export interface Profile { staff: Staff | null; aal: "aal1" | "aal2" | null }

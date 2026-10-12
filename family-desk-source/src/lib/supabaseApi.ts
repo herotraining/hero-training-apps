@@ -50,7 +50,14 @@ export function supabaseApi(): Api {
   const sb = supabase();
   const fail = (e: { message: string } | null) => { if (e) throw new Error(e.message); };
 
-  return {
+  // After a change that can open or close hub access (a family, a child's class, a staff member), ask the
+  // kajabi-sync function to catch up, a moment later and without waiting on it. A failure here is never shown:
+  // the Staff screen's Kajabi pane says what's still pending.
+  let nudgeTimer: number | undefined;
+  const nudgeKajabi = () => { window.clearTimeout(nudgeTimer); nudgeTimer = window.setTimeout(() => { callFunction("kajabi-sync", { action: "sync" }).catch(() => {}); }, 1500); };
+  const andNudge = <T,>(p: Promise<T>): Promise<T> => p.then((v) => { nudgeKajabi(); return v; });
+
+  const base: Api = {
     mock: false,
     async profile() {
       const { data, error } = await sb.rpc("my_profile");
@@ -262,5 +269,20 @@ export function supabaseApi(): Api {
       fail(error);
       return data ?? [];
     },
+    kajabiStatus: () => callFunction("kajabi-sync", { action: "status" }),
+    kajabiSync: () => callFunction("kajabi-sync", { action: "sync" }),
+  };
+
+  // The changes that can open or close hub access nudge the sync.
+  return {
+    ...base,
+    saveFamily: (f) => andNudge(base.saveFamily(f)),
+    saveGuardian: (g) => andNudge(base.saveGuardian(g)),
+    removeGuardian: (id) => andNudge(base.removeGuardian(id)),
+    saveChild: (c) => andNudge(base.saveChild(c)),
+    saveEnrollment: (e) => andNudge(base.saveEnrollment(e)),
+    removeEnrollment: (id) => andNudge(base.removeEnrollment(id)),
+    addStaff: (s) => andNudge(base.addStaff(s)),
+    setStaffActive: (id, active) => andNudge(base.setStaffActive(id, active)),
   };
 }

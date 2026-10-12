@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import type { Attendance, Closure, EsaInvoice, FeedItem, Program, RosterRow, Site, Staff } from "../types";
+import type { Attendance, Closure, EsaInvoice, FeedItem, Program, RosterRow, Site, Staff, UniformRequest } from "../types";
 import { ageBand, ageOn, ageWords, arizonaNow, arizonaToday, dateWords, monthWords, timeWords, WEEKDAYS, money, siteName } from "../lib/util";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
 import { href } from "../router";
@@ -21,6 +21,7 @@ export function Today({ staff }: { staff: Staff }) {
   const [marks, setMarks] = useState<Map<string, Attendance["status"]>>(new Map());
   const [needs, setNeeds] = useState<EsaInvoice[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [uniforms, setUniforms] = useState<UniformRequest[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [editing, setEditing] = useState<Closure | null | "new">(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,8 +42,8 @@ export function Today({ staff }: { staff: Staff }) {
         setRosters(r); setClosures(c);
         setMarks(new Map(at.map((x) => [x.enrollment_id, x.status])));
         if (canMoney) {
-          const [inv, s, f] = await Promise.all([a.esaInvoices(), a.sites(), a.feed().catch(() => [] as FeedItem[])]);
-          setSites(s); setFeed(f);
+          const [inv, s, f, u] = await Promise.all([a.esaInvoices(), a.sites(), a.feed().catch(() => [] as FeedItem[]), a.uniformRequests().catch(() => [] as UniformRequest[])]);
+          setSites(s); setFeed(f); setUniforms(u.filter((r) => r.status === "new"));
           setNeeds(inv.filter((i) => (i.status === "sent" || i.status === "submitted") && i.class_month <= today).concat(inv.filter((i) => i.status === "rejected")));
         }
       } catch (e) { setError((e as Error).message); }
@@ -101,10 +102,17 @@ export function Today({ staff }: { staff: Staff }) {
           <div className="section"><div className="err">{closedToday.map((c) => <div key={c.id}><b>{c.title}</b>{c.site_id ? ` (${siteName(c.site_id)})` : ""}{c.note ? ` ${c.note}` : ""}</div>)}</div></div>
         )}
 
-        {canMoney && needs.length > 0 && (
+        {canMoney && (needs.length > 0 || uniforms.length > 0) && (
           <div className="section">
             <h2>Needs you</h2>
             <ul className="list">
+              {uniforms.length > 0 && (
+                <li><a className="item" href={href.store}>
+                  <span className="n">{uniforms.reduce((n, r) => n + r.quantity, 0)} uniform{uniforms.reduce((n, r) => n + r.quantity, 0) === 1 ? "" : "s"} requested from the Family Hub</span>
+                  <span className="k">{[...new Set(uniforms.map((r) => r.child?.first_name).filter(Boolean))].join(", ")}. Fill and bill them on the Store screen.</span>
+                  <span className="p"><Tag kind="gold">Waiting</Tag></span>
+                </a></li>
+              )}
               {needs.map((i) => (
                 <li key={i.id}><a className="item" href={href.family(i.child?.family_id ?? "")}>
                   <span className="n">{i.child?.first_name} {i.child?.last_name}, {monthWords(i.class_month.slice(0, 7))} ESA invoice</span>

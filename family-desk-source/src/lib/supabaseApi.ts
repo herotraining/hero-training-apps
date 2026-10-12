@@ -1,6 +1,6 @@
 import type { Api } from "./api";
 import { supabase, functionsUrl } from "./supabase";
-import { AGREEMENT_KINDS, type Family, type Program, type RosterRow, type StoreSale } from "../types";
+import { AGREEMENT_KINDS, type Family, type Program, type RosterRow, type StoreSale, type UniformRequest } from "../types";
 
 async function callFunction<T>(name: string, body: unknown): Promise<T> {
   const sb = supabase();
@@ -17,6 +17,18 @@ async function callFunction<T>(name: string, body: unknown): Promise<T> {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json?.error ?? json?.note ?? `Request failed (${res.status})`);
+  return json as T;
+}
+
+// A function that needs no sign-in (the parent-facing request page).
+async function callPublicFunction<T>(name: string, body: unknown): Promise<T> {
+  const res = await fetch(functionsUrl(name), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string, Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string}` },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error ?? `Request failed (${res.status})`);
   return json as T;
 }
 
@@ -38,7 +50,14 @@ export function supabaseApi(): Api {
   const sb = supabase();
   const fail = (e: { message: string } | null) => { if (e) throw new Error(e.message); };
 
-  return {
+  // After a change that can open or close hub access (a family, a child's class, a staff member), ask the
+  // kajabi-sync function to catch up, a moment later and without waiting on it. A failure here is never shown:
+  // the Staff screen's Kajabi pane says what's still pending.
+  let nudgeTimer: number | undefined;
+  const nudgeKajabi = () => { window.clearTimeout(nudgeTimer); nudgeTimer = window.setTimeout(() => { callFunction("kajabi-sync", { action: "sync" }).catch(() => {}); }, 1500); };
+  const andNudge = <T,>(p: Promise<T>): Promise<T> => p.then((v) => { nudgeKajabi(); return v; });
+
+  const base: Api = {
     mock: false,
     async profile() {
       const { data, error } = await sb.rpc("my_profile");
@@ -184,16 +203,23 @@ export function supabaseApi(): Api {
       return data ?? [];
     },
     storeConfig: () => callFunction("store", { action: "config" }),
-    async storeItems() { const { data, error } = await sb.from("store_items").select("id, name, kind, price_cents, sizes, esa_ok, active, sort").order("sort").order("name"); fail(error); return data ?? []; },
+    async storeItems() { const { data, error } = await sb.from("store_items").select("id, name, kind, price_cents, sizes, colors, esa_ok, active, sort, image_url, description").order("sort").order("name"); fail(error); return data ?? []; },
     async saveStoreItem(i) {
       const { id, ...rest } = i;
       const { error } = id ? await sb.from("store_items").update(rest).eq("id", id) : await sb.from("store_items").insert(rest);
       fail(error);
     },
+    async uploadStoreImage(file) {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error } = await sb.storage.from("store-images").upload(path, file, { contentType: file.type || undefined, upsert: false });
+      fail(error);
+      return sb.storage.from("store-images").getPublicUrl(path).data.publicUrl;
+    },
     async storeSales(sinceIso) {
       const { data, error } = await sb
         .from("store_sales")
-        .select("id, family_id, site_id, pay, status, total_cents, stripe_checkout_id, stripe_url, stripe_live, note, paid_at, created_at, lines:store_sale_lines(id, sale_id, item_id, child_id, name, size, quantity, unit_cents, esa_invoice_id, handed_out_at, child:children(first_name, last_name)), family:families(name), seller:staff(name)")
+        .select("id, family_id, site_id, pay, status, total_cents, stripe_checkout_id, stripe_url, stripe_live, note, paid_at, created_at, lines:store_sale_lines(id, sale_id, item_id, child_id, name, size, color, quantity, unit_cents, esa_invoice_id, handed_out_at, child:children(first_name, last_name)), family:families(name), seller:staff(name)")
         .gte("created_at", sinceIso)
         .order("created_at", { ascending: false })
         .limit(300);
@@ -210,6 +236,20 @@ export function supabaseApi(): Api {
     storeCancel: (saleId, reason) => callFunction("store", { action: "cancel", sale_id: saleId, reason }),
     async voidSale(saleId, note) { const { error } = await sb.from("store_sales").update({ status: "void", note }).eq("id", saleId); fail(error); },
     async setHandedOut(lineId, handed) { const { error } = await sb.from("store_sale_lines").update({ handed_out_at: handed ? new Date().toISOString() : null }).eq("id", lineId); fail(error); },
+    chargeCard: (s) => callFunction("store", { action: "charge", cart: { site_id: s.site_id, family_id: s.family_id, note: s.note, lines: s.lines } }),
+    async uniformRequests() {
+      const { data, error } = await sb.from("uniform_requests")
+        .select("*, child:children(first_name, last_name, esa, uniform_size), family:families(name, site_id, stripe_customer_id)")
+        .order("status").order("created_at").limit(300);
+      fail(error);
+      return (data ?? []) as unknown as UniformRequest[];
+    },
+    async closeRequests(ids, status, saleId, note) {
+      const { error } = await sb.from("uniform_requests").update({ status, sale_id: saleId, closed_note: note }).in("id", ids).eq("status", "new");
+      fail(error);
+    },
+    uniformLookup: (email, childFirstName) => callPublicFunction("uniform-request", { action: "lookup", email, child_first_name: childFirstName }),
+    uniformSubmit: (ask) => callPublicFunction("uniform-request", { action: "submit", ...ask }),
     async staff() { const { data, error } = await sb.from("staff").select("*").order("name"); fail(error); return data ?? []; },
     async addStaff(s) { const { error } = await sb.from("staff").insert(s); fail(error); },
     async setStaffActive(id, active) { const { error } = await sb.from("staff").update({ active }).eq("id", id); fail(error); },
@@ -229,5 +269,20 @@ export function supabaseApi(): Api {
       fail(error);
       return data ?? [];
     },
+    kajabiStatus: () => callFunction("kajabi-sync", { action: "status" }),
+    kajabiSync: () => callFunction("kajabi-sync", { action: "sync" }),
+  };
+
+  // The changes that can open or close hub access nudge the sync.
+  return {
+    ...base,
+    saveFamily: (f) => andNudge(base.saveFamily(f)),
+    saveGuardian: (g) => andNudge(base.saveGuardian(g)),
+    removeGuardian: (id) => andNudge(base.removeGuardian(id)),
+    saveChild: (c) => andNudge(base.saveChild(c)),
+    saveEnrollment: (e) => andNudge(base.saveEnrollment(e)),
+    removeEnrollment: (id) => andNudge(base.removeEnrollment(id)),
+    addStaff: (s) => andNudge(base.addStaff(s)),
+    setStaffActive: (id, active) => andNudge(base.setStaffActive(id, active)),
   };
 }

@@ -7,7 +7,7 @@
 // Row-level security is not modelled.
 
 type Row = Record<string, any>;
-type Filter = { op: "eq" | "neq" | "is" | "in" | "not_is" | "gte"; col: string; val: any };
+type Filter = { op: "eq" | "neq" | "is" | "in" | "not_is" | "gte" | "ilike"; col: string; val: any };
 type Result = { data: any; error: { message: string } | null; count?: number | null };
 
 export type Profile = { staff: { id?: string; role: string } | null; aal: string };
@@ -17,8 +17,8 @@ export const newId = (prefix = "row") => `${prefix}-${++seq}`;
 
 export class FakeDb {
   tables: Record<string, Row[]> = {
-    sites: [], families: [], children: [], programs: [], enrollments: [],
-    esa_invoices: [], store_items: [], store_sales: [], store_sale_lines: [], classwallet_deposits: [],
+    sites: [], families: [], guardians: [], children: [], programs: [], enrollments: [], staff: [],
+    esa_invoices: [], store_items: [], store_sales: [], store_sale_lines: [], classwallet_deposits: [], uniform_requests: [], kajabi_access: [],
   };
   profile: Profile = { staff: { id: "staff-owner", role: "owner" }, aal: "aal2" };
   calls: { table: string; op: string; filters: Filter[]; payload?: any; trusted: boolean }[] = [];
@@ -88,7 +88,7 @@ export class FakeDb {
       if (!it) return err("An item in the cart is no longer for sale. Remove it and add it again.");
       const q = l.quantity ?? 1;
       total += it.price_cents * q;
-      built.push({ item_id: it.id, child_id: l.child_id ?? null, name: it.name, size: l.size ?? null, quantity: q, unit_cents: it.price_cents });
+      built.push({ item_id: it.id, child_id: l.child_id ?? null, name: it.name, size: l.size ?? null, color: l.color ?? null, quantity: q, unit_cents: it.price_cents });
     }
     if (a.p_pay === "card" && !a.p_card_tapped && total < 50) return err("Stripe can't take a card payment under $0.50.");
     const status = a.p_pay === "card" ? (a.p_card_tapped ? "done" : "waiting") : a.p_pay === "esa" ? "on_esa" : "done";
@@ -129,12 +129,19 @@ export class FakeDb {
     }
     if (table === "store_sale_lines") return { store_sales: this.find("store_sales", row.sale_id) ?? null };
     if (table === "store_sales") return { lines: this.tables.store_sale_lines.filter((l) => l.sale_id === row.id).map((l) => ({ ...l })) };
+    if (table === "guardians") return { families: this.find("families", row.family_id) ?? null };
+    if (table === "children") return { enrollments: this.tables.enrollments.filter((e) => e.child_id === row.id).map((e) => ({ ...e })) };
+    if (table === "families") return {
+      guardians: this.tables.guardians.filter((g) => g.family_id === row.id).map((g) => ({ ...g })),
+      children: this.tables.children.filter((c) => c.family_id === row.id).map((c) => ({ ...c, ...this.embeds("children", c) })),
+    };
     return {};
   }
 }
 
 class Query implements PromiseLike<Result> {
-  private op: "select" | "insert" | "update" | "delete" = "select";
+  private op: "select" | "insert" | "update" | "delete" | "upsert" = "select";
+  private conflict: string[] = [];
   private filters: Filter[] = [];
   private payload: any;
   private returning = false;
@@ -150,6 +157,7 @@ class Query implements PromiseLike<Result> {
     return this;
   }
   insert(row: Row) { this.op = "insert"; this.payload = row; return this; }
+  upsert(row: Row | Row[], opts?: { onConflict?: string }) { this.op = "upsert"; this.payload = row; this.conflict = (opts?.onConflict ?? "id").split(",").map((c) => c.trim()); return this; }
   update(patch: Row) { this.op = "update"; this.payload = patch; return this; }
   delete() { this.op = "delete"; return this; }
   eq(col: string, val: any) { this.filters.push({ op: "eq", col, val }); return this; }
@@ -157,6 +165,8 @@ class Query implements PromiseLike<Result> {
   is(col: string, val: any) { this.filters.push({ op: "is", col, val }); return this; }
   in(col: string, val: any[]) { this.filters.push({ op: "in", col, val }); return this; }
   gte(col: string, val: any) { this.filters.push({ op: "gte", col, val }); return this; }
+  // Without wildcards, PostgREST's ilike is a case-insensitive equality; that is all the functions use.
+  ilike(col: string, val: string) { this.filters.push({ op: "ilike", col, val }); return this; }
   not(col: string, op: string, val: any) {
     if (op !== "is") throw new Error(`fake db: .not() only models "is", got ${op}`);
     this.filters.push({ op: "not_is", col, val }); return this;
@@ -184,6 +194,7 @@ class Query implements PromiseLike<Result> {
       if (f.op === "is") return (v ?? null) === f.val;
       if (f.op === "not_is") return (v ?? null) !== f.val;
       if (f.op === "gte") return v >= f.val;
+      if (f.op === "ilike") return String(v ?? "").toLowerCase() === String(f.val).toLowerCase();
       return f.val.includes(v);
     });
   }
@@ -211,14 +222,28 @@ class Query implements PromiseLike<Result> {
       return this.shape(found);
     }
 
-    if (this.op === "insert") {
-      const row = { id: newId(table), ...this.payload };
-      // Mirrors esa_invoices_live_child_month (migration 0016): one live invoice per child per month; void ones don't count.
-      if (table === "esa_invoices" && row.status !== "void" && rows.some((r) => r.child_id === row.child_id && r.class_month === row.class_month && r.status !== "void")) {
-        return { data: null, error: { message: 'duplicate key value violates unique constraint "esa_invoices_live_child_month"' } };
+    if (this.op === "upsert") {
+      const made: Row[] = [];
+      for (const p of Array.isArray(this.payload) ? this.payload : [this.payload]) {
+        const had = rows.find((r) => this.conflict.every((c) => r[c] === p[c]));
+        if (had) { Object.assign(had, p); made.push(had); }
+        else { const row = { id: newId(table), ...p }; rows.push(row); made.push(row); }
       }
-      rows.push(row);
-      return this.shape([row]);
+      return this.shape(made);
+    }
+
+    if (this.op === "insert") {
+      const made: Row[] = [];
+      for (const p of Array.isArray(this.payload) ? this.payload : [this.payload]) {
+        const row = { id: newId(table), ...p };
+        // Mirrors esa_invoices_live_child_month (migration 0016): one live invoice per child per month; void ones don't count.
+        if (table === "esa_invoices" && row.status !== "void" && rows.some((r) => r.child_id === row.child_id && r.class_month === row.class_month && r.status !== "void")) {
+          return { data: null, error: { message: 'duplicate key value violates unique constraint "esa_invoices_live_child_month"' } };
+        }
+        if (table === "uniform_requests") Object.assign(row, { status: row.status ?? "new", sale_id: row.sale_id ?? null, created_at: row.created_at ?? new Date().toISOString() });
+        rows.push(row); made.push(row);
+      }
+      return this.shape(made);
     }
 
     if (this.op === "update") {

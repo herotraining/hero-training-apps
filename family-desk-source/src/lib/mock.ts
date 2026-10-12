@@ -1,6 +1,6 @@
 // Made-up data mirroring the practice families, for screenshots and design work without a sign-in.
 import type { Api } from "./api";
-import type { Child, ClassWalletDeposit, Enrollment, EsaInvoice, Family, FeedItem, JackrabbitLine, NewSale, Program, RosterRow, Staff, StoreItem, StoreSale, TrainerPay } from "../types";
+import type { Child, ClassWalletDeposit, Enrollment, EsaInvoice, Family, FeedItem, JackrabbitLine, NewSale, Program, RosterRow, Staff, StoreItem, StoreSale, TrainerPay, UniformRequest } from "../types";
 
 const sites = [
   { id: "peoria", name: "Peoria", gym: "Oasis Gymnastics", city: "Peoria" },
@@ -109,16 +109,17 @@ const pay: TrainerPay[] = [
 ];
 
 const SIZES = ["Youth XS", "Youth S", "Youth M", "Youth L", "Youth XL", "Adult S", "Adult M", "Adult L", "Adult XL", "Adult 2XL"];
+const COLORS = ["Navy", "Red", "Black"];
 let storeItems: StoreItem[] = [
-  { id: "si1", name: "HERO uniform tank top", kind: "uniform", price_cents: 2500, sizes: SIZES, esa_ok: true, active: true, sort: 10 },
-  { id: "si2", name: "HERO uniform T-shirt", kind: "uniform", price_cents: 2500, sizes: SIZES, esa_ok: true, active: true, sort: 20 },
-  { id: "si3", name: "HERO uniform hoodie", kind: "uniform", price_cents: 2500, sizes: SIZES, esa_ok: true, active: true, sort: 30 },
-  { id: "si4", name: "Extra HERO T-shirt", kind: "gear", price_cents: 1500, sizes: SIZES, esa_ok: false, active: true, sort: 40 },
+  { id: "si1", name: "HERO uniform tank top", kind: "uniform", price_cents: 2500, sizes: SIZES, colors: COLORS, esa_ok: true, active: true, sort: 10, image_url: null, description: "The everyday training tank. Required for class." },
+  { id: "si2", name: "HERO uniform T-shirt", kind: "uniform", price_cents: 2500, sizes: SIZES, colors: COLORS, esa_ok: true, active: true, sort: 20, image_url: null, description: "Short-sleeve training shirt. Required for class." },
+  { id: "si3", name: "HERO uniform hoodie", kind: "uniform", price_cents: 2500, sizes: SIZES, colors: ["Navy"], esa_ok: true, active: true, sort: 30, image_url: null, description: "For cold mornings and the walk in." },
+  { id: "si4", name: "Extra HERO T-shirt", kind: "gear", price_cents: 1500, sizes: SIZES, colors: [], esa_ok: false, active: true, sort: 40, image_url: null, description: "A spare, for parents too." },
 ];
 const ago = (min: number) => new Date(Date.now() - min * 60000).toISOString();
 const kidName = (id: string) => { const c = families.flatMap((f) => f.children ?? []).find((k) => k.id === id); return c ? { first_name: c.first_name, last_name: c.last_name } : null; };
-const line = (sale: string, n: number, item: StoreItem, size: string | null, child: string | null, handed: string | null, qty = 1, unit = item.price_cents) =>
-  ({ id: `${sale}-l${n}`, sale_id: sale, item_id: item.id, child_id: child, name: item.name, size, quantity: qty, unit_cents: unit, esa_invoice_id: null, handed_out_at: handed, child: child ? kidName(child) : null });
+const line = (sale: string, n: number, item: StoreItem, size: string | null, child: string | null, handed: string | null, qty = 1, unit = item.price_cents, color: string | null = item.colors[0] ?? null) =>
+  ({ id: `${sale}-l${n}`, sale_id: sale, item_id: item.id, child_id: child, name: item.name, size, color, quantity: qty, unit_cents: unit, esa_invoice_id: null, handed_out_at: handed, child: child ? kidName(child) : null });
 let storeSales: StoreSale[] = [
   { id: "ms1", family_id: "fa", site_id: "peoria", pay: "esa", status: "on_esa", total_cents: 2500, stripe_checkout_id: null, stripe_url: null, stripe_live: null, note: null, paid_at: null, created_at: ago(40), lines: [line("ms1", 1, storeItems[1], "Youth M", "ca1", null)], family: { name: "Test Family A" }, seller: { name: "Mike" } },
   { id: "ms2", family_id: null, site_id: "peoria", pay: "card", status: "done", total_cents: 1500, stripe_checkout_id: null, stripe_url: null, stripe_live: null, note: null, paid_at: ago(130), created_at: ago(130), lines: [line("ms2", 1, storeItems[3], "Adult L", null, ago(129))], family: null, seller: { name: "Lisa" } },
@@ -126,6 +127,11 @@ let storeSales: StoreSale[] = [
   { id: "ms4", family_id: "fb", site_id: "peoria", pay: "card", status: "done", total_cents: 2500, stripe_checkout_id: "cs_test_1", stripe_url: null, stripe_live: false, note: null, paid_at: ago(60 * 50), created_at: ago(60 * 50), lines: [line("ms4", 1, storeItems[2], "Youth L", "cb1", ago(60 * 50))], family: { name: "Test Family B" }, seller: { name: "Mike" } },
 ];
 const demoSessions = new Map<string, number>();
+let uniformRequests: UniformRequest[] = [
+  { id: "ur1", family_id: "fb", child_id: "cb1", item_id: "si1", item_name: "HERO uniform tank top", size: "Youth L", color: "Red", quantity: 2, note: "Before the Oct 25 meet if possible", requested_by_email: "blake.parent@example.com", status: "new", sale_id: null, closed_note: null, created_at: ago(60 * 20), child: { first_name: "Blake", last_name: "Brown", esa: false, uniform_size: "YL" }, family: { name: "Test Family B", site_id: "peoria", stripe_customer_id: "cus_demo_b" } },
+  { id: "ur2", family_id: "fb", child_id: "cb1", item_id: "si3", item_name: "HERO uniform hoodie", size: "Youth L", color: "Navy", quantity: 1, note: null, requested_by_email: "blake.parent@example.com", status: "new", sale_id: null, closed_note: null, created_at: ago(60 * 20), child: { first_name: "Blake", last_name: "Brown", esa: false, uniform_size: "YL" }, family: { name: "Test Family B", site_id: "peoria", stripe_customer_id: "cus_demo_b" } },
+  { id: "ur3", family_id: "fa", child_id: "ca1", item_id: "si2", item_name: "HERO uniform T-shirt", size: "Youth M", color: "Navy", quantity: 1, note: null, requested_by_email: "alex@example.com", status: "new", sale_id: null, closed_note: null, created_at: ago(60 * 3), child: { first_name: "Avery", last_name: "Anderson", esa: true, uniform_size: "YM" }, family: { name: "Test Family A", site_id: "peoria", stripe_customer_id: "cus_demo_a" } },
+];
 function mockSale(s: NewSale, status: StoreSale["status"]): StoreSale {
   const f = families.find((x) => x.id === s.family_id) ?? null;
   if ((s.pay === "esa" || s.pay === "jackrabbit") && !f) throw new Error("Pick the family first.");
@@ -133,7 +139,7 @@ function mockSale(s: NewSale, status: StoreSale["status"]): StoreSale {
   if (s.pay === "jackrabbit" && f?.stripe_customer_id) throw new Error("This family is billed in Family Desk now, not Jackrabbit.");
   if (s.pay === "free" && !s.note?.trim()) throw new Error("Say why there is no charge.");
   const id = "ms" + Date.now();
-  const lines = s.lines.map((l, i) => { const it = storeItems.find((x) => x.id === l.item_id)!; return line(id, i, it, l.size, l.child_id, null, l.quantity, s.pay === "free" ? 0 : it.price_cents); });
+  const lines = s.lines.map((l, i) => { const it = storeItems.find((x) => x.id === l.item_id)!; return line(id, i, it, l.size, l.child_id, null, l.quantity, s.pay === "free" ? 0 : it.price_cents, l.color); });
   const sale: StoreSale = { id, family_id: f?.id ?? null, site_id: s.site_id, pay: s.pay, status, total_cents: lines.reduce((n, l) => n + l.unit_cents * l.quantity, 0), stripe_checkout_id: null, stripe_url: null, stripe_live: null, note: s.note, paid_at: status === "done" && s.pay !== "jackrabbit" ? new Date().toISOString() : null, created_at: new Date().toISOString(), lines, family: f ? { name: f.name } : null, seller: { name: "Mike" } };
   storeSales = [sale, ...storeSales];
   return sale;
@@ -244,6 +250,31 @@ export function mockApi(): Api {
     async trainerPay(sinceIso) { await sleep(60); return pay.filter((p) => p.paid_on >= sinceIso); },
     async storeConfig() { return { card: "practice" }; },
     async storeItems() { await sleep(60); return storeItems.slice().sort((a, b) => a.sort - b.sort); },
+    async uploadStoreImage(file) { return URL.createObjectURL(file); },
+    async chargeCard(s) { await sleep(400); const sale = mockSale(s, "done"); return { sale_id: sale.id, status: "paid", amount: sale.total_cents, live: false, last4: "4242", brand: "visa" }; },
+    async uniformRequests() { await sleep(40); return uniformRequests.slice(); },
+    async closeRequests(ids, status, saleId, note) { uniformRequests = uniformRequests.map((r) => (ids.includes(r.id) && r.status === "new" ? { ...r, status, sale_id: saleId, closed_note: note } : r)); },
+    async uniformLookup(email, first) {
+      await sleep(300);
+      const kids = families.filter((f) => f.status === "active" && (f.guardians ?? []).some((g) => (g.email ?? "").toLowerCase() === email.toLowerCase()))
+        .flatMap((f) => (f.children ?? []).filter((c) => c.active && c.first_name.toLowerCase() === first.toLowerCase() && (c.enrollments ?? []).some((e) => e.status === "active")).map((c) => {
+          const esa = c.esa && (c.enrollments ?? []).some((e) => e.status === "active" && e.pay === "esa");
+          return { id: c.id, first_name: c.first_name, last_name: c.last_name, uniform_size: c.uniform_size, family_id: f.id, family_name: f.name, pay: !f.stripe_customer_id ? "jackrabbit" as const : esa ? "esa" as const : "card" as const, esa_ok: esa };
+        }));
+      if (!kids.length) throw new Error("We couldn't find a child by that name with an active class under that email. Check the spelling, or ask the front desk which email is on file.");
+      return { children: kids, items: storeItems.filter((i) => i.kind === "uniform" && i.active).map(({ id, name, price_cents, sizes, colors, esa_ok, image_url, description }) => ({ id, name, price_cents, sizes, colors, esa_ok, image_url, description })) };
+    },
+    async uniformSubmit(ask) {
+      await sleep(300);
+      const look = await this.uniformLookup(ask.email, ask.child_first_name);
+      const kid = look.children.find((k) => k.id === ask.child_id);
+      if (!kid) throw new Error("That child isn't on file under this email, or has no active class.");
+      for (const l of ask.lines) {
+        const it = storeItems.find((i) => i.id === l.item_id)!;
+        uniformRequests = [...uniformRequests, { id: "ur" + Date.now() + Math.random(), family_id: kid.family_id, child_id: kid.id, item_id: it.id, item_name: it.name, size: l.size, color: l.color, quantity: l.quantity, note: ask.note, requested_by_email: ask.email, status: "new", sale_id: null, closed_note: null, created_at: new Date().toISOString(), child: { first_name: kid.first_name, last_name: kid.last_name, esa: kid.esa_ok, uniform_size: kid.uniform_size }, family: { name: kid.family_name, site_id: "peoria", stripe_customer_id: kid.pay === "jackrabbit" ? null : "cus_demo" } }];
+      }
+      return { ok: true, child: kid.first_name, pay: kid.pay, lines: ask.lines.length };
+    },
     async saveStoreItem(i) { if (i.id) storeItems = storeItems.map((x) => (x.id === i.id ? { ...x, ...i, id: i.id! } : x)); else storeItems = [...storeItems, { ...i, id: "si" + Date.now() }]; },
     async storeSales(sinceIso) { await sleep(60); return storeSales.filter((s) => s.created_at >= sinceIso); },
     async sell(s) { await sleep(150); return mockSale(s, s.pay === "card" ? "done" : s.pay === "esa" ? "on_esa" : "done"); },
@@ -278,6 +309,8 @@ export function mockApi(): Api {
     async setCoachAssignments(staffId, programIds) { assignments = [...assignments.filter((a) => a.staff_id !== staffId), ...programIds.map((program_id) => ({ staff_id: staffId, program_id }))]; },
     async staffSignin(staffId, action) { if (action === "reset_2fa") return { ok: true, removed: 1 }; const st = staff.find((x) => x.id === staffId)!; if (action === "create") staff = staff.map((x) => (x.id === staffId ? { ...x, user_id: "u-" + x.id } : x)); return { ok: true, email: st.email, password: "maple-harbor-comet-42" }; },
     async changePassword() { await sleep(100); },
+    async kajabiStatus() { await sleep(80); return { configured: false, counts: { family: 0, staff: 0, errors: 0 }, to_grant: 9, to_revoke: 0 }; },
+    async kajabiSync() { await sleep(300); throw new Error("Kajabi isn't connected yet. Add KAJABI_CLIENT_ID and KAJABI_CLIENT_SECRET to Supabase secrets (Kajabi: Settings → Public API)."); },
     async auditRecent() { return [{ id: 1, at: new Date().toISOString(), actor_email: "lisa@example.com", action: "update", entity: "esa_invoices", entity_id: "id", reason: "ClassWallet deposit seen in bank" }]; },
   };
 }

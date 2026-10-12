@@ -1,0 +1,205 @@
+// Kajabi access sync (supabase/functions/kajabi-sync): who should be in the hubs, who is, and the grants and
+// revokes that close the gap. The real function runs against the in-memory database and a pretend Kajabi API.
+// Made-up families and staff only.
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { FakeDb } from "./fakes/fakeDb";
+import { FakeKajabi } from "./fakes/fakeKajabi";
+
+const FAMILY = "2151417348", STAFF = "2151415672";
+let handler: (req: Request) => Promise<Response>;
+let db: FakeDb;
+let kajabi: FakeKajabi;
+const env: Record<string, string> = {};
+const realFetch = globalThis.fetch;
+
+beforeAll(async () => {
+  (globalThis as any).Deno = { serve: (h: typeof handler) => { handler = h; }, env: { get: (k: string) => env[k] } };
+  await import("../supabase/functions/kajabi-sync/index.ts");
+});
+afterAll(() => { globalThis.fetch = realFetch; delete (globalThis as any).Deno; });
+
+beforeEach(() => {
+  for (const k of Object.keys(env)) delete env[k];
+  Object.assign(env, { SUPABASE_URL: "http://supabase.invalid", SUPABASE_ANON_KEY: "anon-test", SUPABASE_SERVICE_ROLE_KEY: "service-test", KAJABI_CLIENT_ID: "kj_client_test", KAJABI_CLIENT_SECRET: "kj_secret_test" });
+  db = new FakeDb();
+  (globalThis as any).__fakeDb = db;
+  kajabi = new FakeKajabi();
+  globalThis.fetch = kajabi.fetch as typeof fetch;
+});
+
+async function call(body: unknown) {
+  const res = await handler(new Request("http://localhost/kajabi-sync", { method: "POST", headers: { Authorization: "Bearer test-user", "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+  return { status: res.status, body: await res.json() };
+}
+
+// The Testers (two guardians, Ava in a class), the Samples (Cal dropped), the Olds (inactive family), and three staff.
+function seed() {
+  const testers = db.insertRow("families", { name: "Tester", status: "active" });
+  db.insertRow("guardians", { family_id: testers.id, name: "Pat Tester", email: "Pat.Tester@Example.test" });
+  db.insertRow("guardians", { family_id: testers.id, name: "Sam Tester", email: "sam.tester@example.test" });
+  db.insertRow("guardians", { family_id: testers.id, name: "Grandma", email: null });
+  const ava = db.insertRow("children", { family_id: testers.id, first_name: "Ava", active: true });
+  const avaClass = db.insertRow("enrollments", { child_id: ava.id, status: "active", pay: "esa" });
+  const samples = db.insertRow("families", { name: "Sample", status: "active" });
+  db.insertRow("guardians", { family_id: samples.id, name: "Sal Sample", email: "sal@example.test" });
+  const cal = db.insertRow("children", { family_id: samples.id, first_name: "Cal", active: true });
+  db.insertRow("enrollments", { child_id: cal.id, status: "dropped", pay: "card" });
+  const olds = db.insertRow("families", { name: "Old", status: "inactive" });
+  db.insertRow("guardians", { family_id: olds.id, name: "Ollie Old", email: "ollie@example.test" });
+  const kid = db.insertRow("children", { family_id: olds.id, first_name: "Kid", active: true });
+  db.insertRow("enrollments", { child_id: kid.id, status: "active", pay: "card" });
+  db.insertRow("staff", { name: "Lisa", email: "lisa@example.test", active: true });
+  db.insertRow("staff", { name: "Kai", email: "kai@example.test", active: true });
+  db.insertRow("staff", { name: "Gone", email: "gone@example.test", active: false });
+  return { testers, samples, olds, ava, avaClass, cal };
+}
+const granted = (email: string, offer: string) => db.tables.kajabi_access.find((r) => r.email === email && r.offer_id === offer && r.status === "granted");
+
+describe("who may run it", () => {
+  it("turns away a coach and an owner without two-step sign-in", async () => {
+    db.profile = { staff: { role: "coach" }, aal: "aal2" };
+    expect((await call({ action: "status" })).status).toBe(403);
+    db.profile = { staff: { role: "owner" }, aal: "aal1" };
+    expect((await call({ action: "status" })).status).toBe(403);
+  });
+});
+
+describe("status and plan", () => {
+  it("counts who should be let in: guardians with a child in a class, and active staff", async () => {
+    seed();
+    const r = await call({ action: "plan" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ configured: true, counts: { family: 0, staff: 0, errors: 0 }, to_grant: 4, to_revoke: 0 });
+    expect(r.body.grants.map((g: any) => [g.email, g.kind]).sort()).toEqual([
+      ["kai@example.test", "staff"], ["lisa@example.test", "staff"], ["pat.tester@example.test", "family"], ["sam.tester@example.test", "family"],
+    ]);
+    // Not Sal (Cal dropped), not Ollie (inactive family), not Gone (inactive staff), not Grandma (no email).
+  });
+
+  it("says when Kajabi isn't connected, and refuses to sync", async () => {
+    seed();
+    delete env.KAJABI_CLIENT_SECRET;
+    expect((await call({ action: "status" })).body.configured).toBe(false);
+    const r = await call({ action: "sync" });
+    expect(r.status).toBe(503);
+    expect(r.body.error).toMatch(/KAJABI_CLIENT_ID/);
+    expect(kajabi.calls).toHaveLength(0);
+  });
+
+  it("plans a revoke for someone who had access and no longer qualifies", async () => {
+    seed();
+    db.insertRow("kajabi_access", { email: "ollie@example.test", kind: "family", offer_id: FAMILY, kajabi_contact_id: "777", status: "granted" });
+    const r = await call({ action: "plan" });
+    expect(r.body.to_revoke).toBe(1);
+    expect(r.body.revokes).toEqual([{ email: "ollie@example.test", kind: "family", offer_id: FAMILY }]);
+  });
+});
+
+describe("sync: granting", () => {
+  it("signs in once, finds or creates each contact, grants the right offer, and keeps the ledger", async () => {
+    seed();
+    const pat = kajabi.addContact("pat.tester@example.test", "Pat T"); // already a Kajabi contact (created a Hero Account)
+    const r = await call({ action: "sync" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, remaining: 0, failed: [] });
+    expect(r.body.granted.sort()).toEqual(["kai@example.test", "lisa@example.test", "pat.tester@example.test", "sam.tester@example.test"]);
+    expect(kajabi.tokensIssued).toBe(1);
+    // Pat was found, not duplicated; Sam was created with the guardian's name.
+    expect(pat.offers.has(FAMILY)).toBe(true);
+    expect(kajabi.contacts.size).toBe(4);
+    const sam = kajabi.byEmail("sam.tester@example.test")!;
+    expect(sam.name).toBe("Sam Tester");
+    expect(sam.offers.has(FAMILY)).toBe(true);
+    expect(kajabi.byEmail("lisa@example.test")!.offers.has(STAFF)).toBe(true);
+    expect(kajabi.byEmail("lisa@example.test")!.offers.has(FAMILY)).toBe(false);
+    expect(granted("pat.tester@example.test", FAMILY)).toMatchObject({ kind: "family", kajabi_contact_id: pat.id });
+    expect(granted("sam.tester@example.test", FAMILY)).toMatchObject({ kajabi_contact_id: sam.id });
+    // The create call carried the site, as Kajabi's JSON:API wants.
+    const create = kajabi.calls.find((c) => c.method === "POST" && c.path === "/v1/contacts")!;
+    expect(create.body).toMatchObject({ data: { type: "contacts", attributes: { email: "sam.tester@example.test" }, relationships: { site: { data: { type: "sites", id: "2148781454" } } } } });
+  });
+
+  it("is a no-op the second time", async () => {
+    seed();
+    await call({ action: "sync" });
+    const before = kajabi.calls.length;
+    const r = await call({ action: "sync" });
+    expect(r.body).toMatchObject({ granted: [], revoked: [], failed: [], remaining: 0 });
+    expect(kajabi.calls.length).toBe(before);
+    expect((await call({ action: "status" })).body).toMatchObject({ counts: { family: 2, staff: 2, errors: 0 }, to_grant: 0, to_revoke: 0 });
+  });
+
+  it("gives a parent who is also staff both hubs", async () => {
+    const s = seed();
+    db.insertRow("staff", { name: "Pat Tester", email: "pat.tester@example.test", active: true });
+    await call({ action: "sync" });
+    const pat = kajabi.byEmail("pat.tester@example.test")!;
+    expect([...pat.offers].sort()).toEqual([STAFF, FAMILY].sort());
+    expect(s.testers.status).toBe("active");
+  });
+
+  it("records a Kajabi failure on that person, carries on with the others, and retries next time", async () => {
+    seed();
+    kajabi.failNext("POST", /^\/v1\/contacts$/, 422, "name is too long");
+    const r = await call({ action: "sync" });
+    expect(r.body.failed).toHaveLength(1);
+    expect(r.body.granted).toHaveLength(3);
+    const bad = db.tables.kajabi_access.find((x) => x.status === "error")!;
+    expect(bad.last_error).toBe("name is too long");
+    expect((await call({ action: "status" })).body).toMatchObject({ counts: { errors: 1 }, to_grant: 1 });
+    const again = await call({ action: "sync" });
+    expect(again.body.granted).toHaveLength(1);
+    expect(db.tables.kajabi_access.filter((x) => x.status === "error")).toHaveLength(0);
+  });
+
+  it("limits one person's sync to that email", async () => {
+    seed();
+    const r = await call({ action: "sync", emails: ["LISA@example.test"] });
+    expect(r.body.granted).toEqual(["lisa@example.test"]);
+    expect(r.body.remaining).toBe(3);
+  });
+
+  it("fails cleanly when Kajabi rejects the credentials", async () => {
+    seed();
+    env.KAJABI_CLIENT_SECRET = "wrong";
+    const r = await call({ action: "sync" });
+    expect(r.body.failed).toHaveLength(4);
+    expect(r.body.failed[0].why).toMatch(/Kajabi sign-in failed/);
+    expect(kajabi.contacts.size).toBe(0);
+  });
+});
+
+describe("sync: revoking", () => {
+  it("closes the Family Hub when the family goes inactive or the child drops, and the Staff Hub when staff are turned off", async () => {
+    const s = seed();
+    await call({ action: "sync" });
+    s.testers.status = "inactive";
+    db.tables.staff.find((p) => p.email === "kai@example.test")!.active = false;
+    const r = await call({ action: "sync" });
+    expect(r.body.revoked.sort()).toEqual(["kai@example.test", "pat.tester@example.test", "sam.tester@example.test"]);
+    expect(kajabi.byEmail("pat.tester@example.test")!.offers.has(FAMILY)).toBe(false);
+    expect(kajabi.byEmail("kai@example.test")!.offers.has(STAFF)).toBe(false);
+    expect(kajabi.byEmail("lisa@example.test")!.offers.has(STAFF)).toBe(true);
+    expect(db.tables.kajabi_access.find((x) => x.email === "kai@example.test")).toMatchObject({ status: "revoked" });
+    // Revoking used the contact id the ledger remembered: no search needed.
+    expect(kajabi.calls.filter((c) => c.method === "GET" && c.path.startsWith("/v1/contacts?")).length).toBe(4);
+  });
+
+  it("closes access when a child's only class ends, and reopens it when a new one starts", async () => {
+    const s = seed();
+    await call({ action: "sync" });
+    s.avaClass.status = "dropped";
+    expect((await call({ action: "sync" })).body.revoked.sort()).toEqual(["pat.tester@example.test", "sam.tester@example.test"]);
+    db.insertRow("enrollments", { child_id: s.ava.id, status: "active", pay: "card" });
+    expect((await call({ action: "sync" })).body.granted.sort()).toEqual(["pat.tester@example.test", "sam.tester@example.test"]);
+    expect(kajabi.byEmail("pat.tester@example.test")!.offers.has(FAMILY)).toBe(true);
+  });
+
+  it("never touches a Hero Account someone made on their own, beyond the one offer", async () => {
+    seed();
+    const sal = kajabi.addContact("sal@example.test", "Sal", ["2151417349"]); // the free Hearth offer, self-made
+    await call({ action: "sync" });
+    expect(sal.offers.has("2151417349")).toBe(true);
+    expect(sal.offers.has(FAMILY)).toBe(false);
+  });
+});

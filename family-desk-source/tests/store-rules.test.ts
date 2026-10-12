@@ -25,6 +25,11 @@ function createTable(name: string): string {
   if (!m) throw new Error(`create table for ${name} not found in migrations`);
   return m[0];
 }
+// Columns later migrations add to a table, in order.
+function addedColumns(name: string): string[] {
+  const re = new RegExp(`alter table public\\.${name} add column if not exists [^;]+;`, "g");
+  return migrations.flatMap((sql) => [...sql.matchAll(re)].map((m) => m[0]));
+}
 
 // The rest of the schema, only as far as the store code reads it, with stand-ins for the sign-in helpers.
 const scaffold = `
@@ -56,8 +61,10 @@ beforeAll(async () => {
   pg = new PGlite();
   await pg.exec(scaffold);
   for (const fn of ["app.aal2", "app.role", "app.site", "app.admin_for", "app.trusted_writer"]) for (const d of definitions(fn)) await pg.exec(d);
-  for (const t of ["store_items", "store_sales", "store_sale_lines"]) await pg.exec(createTable(t));
-  await pg.exec("alter table public.store_sales add column if not exists settled_by uuid references public.staff(id)");
+  for (const t of ["store_items", "store_sales", "store_sale_lines"]) {
+    await pg.exec(createTable(t));
+    for (const col of addedColumns(t)) await pg.exec(col);
+  }
   for (const fn of ["app.stamp_store_sale", "app.guard_store_line", "public.store_create_sale"]) {
     const defs = definitions(fn);
     expect(defs.length, `${fn} not found in migrations`).toBeGreaterThan(0);
@@ -86,11 +93,11 @@ beforeEach(async () => {
   const c = await pg.query<{ id: string }>(`insert into public.children (family_id, first_name, last_name) values ($1, 'Ava', 'Tester'), ($1, 'Ben', 'Tester'), ($2, 'Cal', 'Sample') returning id`, [testers, samples]);
   const [ava, ben, cal] = c.rows.map((r) => r.id);
   await pg.query("insert into public.enrollments (child_id, program_id, pay, status) values ($1, 'ninja', 'esa', 'active'), ($2, 'ninja', 'card', 'active')", [ava, ben]);
-  const i = await pg.query<{ id: string }>(`insert into public.store_items (name, kind, price_cents, sizes, esa_ok, active) values
-    ('HERO uniform tank top', 'uniform', 2500, array['Youth S','Youth M'], true, true),
-    ('HERO uniform hoodie', 'uniform', 2500, array['Youth S','Youth M'], true, true),
-    ('Water bottle', 'gear', 1000, '{}', false, true),
-    ('Old shirt', 'gear', 500, '{}', false, false) returning id`);
+  const i = await pg.query<{ id: string }>(`insert into public.store_items (name, kind, price_cents, sizes, colors, esa_ok, active) values
+    ('HERO uniform tank top', 'uniform', 2500, array['Youth S','Youth M'], array['Navy','Red'], true, true),
+    ('HERO uniform hoodie', 'uniform', 2500, array['Youth S','Youth M'], '{}', true, true),
+    ('Water bottle', 'gear', 1000, '{}', '{}', false, true),
+    ('Old shirt', 'gear', 500, '{}', '{}', false, false) returning id`);
   const [tank, hoodie, bottle, old] = i.rows.map((r) => r.id);
   ids = { testers, ava, ben, samples, cal, tank, hoodie, bottle, old };
   await as("owner");
@@ -103,7 +110,7 @@ async function as(who: "owner" | "admin" | "coach" | "owner_aal1" | "service" | 
   await pg.query("select set_config('test.uid', $1, false), set_config('test.jwt', $2, false)", [uid, jwt]);
 }
 
-type Line = { item_id: string; quantity?: number; size?: string; child_id?: string; unit_cents?: number };
+type Line = { item_id: string; quantity?: number; size?: string; color?: string; child_id?: string; unit_cents?: number };
 async function sell(pay: string, lines: Line[], opts: { site?: string; family?: string | null; tapped?: boolean; note?: string | null } = {}) {
   const r = await pg.query<any>("select to_jsonb(public.store_create_sale($1, $2, $3, $4, $5, $6)) as s", [
     opts.site ?? "surprise", opts.family === undefined ? ids.testers : opts.family, pay, opts.tapped ?? false, opts.note ?? null, JSON.stringify(lines),
@@ -112,7 +119,7 @@ async function sell(pay: string, lines: Line[], opts: { site?: string; family?: 
 }
 const selling = (...a: Parameters<typeof sell>) => expect(sell(...a)).rejects;
 async function linesOf(saleId: string) {
-  return (await pg.query<any>("select name, size, quantity, unit_cents, child_id, esa_invoice_id from public.store_sale_lines where sale_id = $1 order by name", [saleId])).rows;
+  return (await pg.query<any>("select name, size, color, quantity, unit_cents, child_id, esa_invoice_id from public.store_sale_lines where sale_id = $1 order by name", [saleId])).rows;
 }
 async function sale(id: string) {
   return (await pg.query<any>("select * from public.store_sales where id = $1", [id])).rows[0];
@@ -152,11 +159,11 @@ describe("who may sell", () => {
 
 describe("what goes on the receipt", () => {
   it("prices every line from the price list and adds them up", async () => {
-    const s = await sell("cash", [{ item_id: ids.tank, size: "Youth M", quantity: 2 }, { item_id: ids.bottle, quantity: 3 }], { family: null });
+    const s = await sell("cash", [{ item_id: ids.tank, size: "Youth M", color: "Navy", quantity: 2 }, { item_id: ids.bottle, quantity: 3 }], { family: null });
     expect(s.total_cents).toBe(2 * 2500 + 3 * 1000);
     expect(await linesOf(s.id)).toEqual([
-      { name: "HERO uniform tank top", size: "Youth M", quantity: 2, unit_cents: 2500, child_id: null, esa_invoice_id: null },
-      { name: "Water bottle", size: null, quantity: 3, unit_cents: 1000, child_id: null, esa_invoice_id: null },
+      { name: "HERO uniform tank top", size: "Youth M", color: "Navy", quantity: 2, unit_cents: 2500, child_id: null, esa_invoice_id: null },
+      { name: "Water bottle", size: null, color: null, quantity: 3, unit_cents: 1000, child_id: null, esa_invoice_id: null },
     ]);
   });
   it("ignores a price the cart sends, unless it disagrees with the list", async () => {
@@ -170,6 +177,13 @@ describe("what goes on the receipt", () => {
     // A size on a one-size item is dropped, not stored.
     const s = await sell("cash", [{ item_id: ids.bottle, size: "Youth M" }], { family: null });
     expect((await linesOf(s.id))[0].size).toBeNull();
+  });
+  it("needs a color when the item comes in colors, and only one on the list (migration 0017)", async () => {
+    await selling("cash", [{ item_id: ids.tank, size: "Youth M" }], { family: null }).toThrow(/Pick a color for the HERO uniform tank top/);
+    await selling("cash", [{ item_id: ids.tank, size: "Youth M", color: "Chartreuse" }], { family: null }).toThrow(/Pick a color/);
+    // A color on a one-color item is dropped, not stored; the hoodie comes in one color.
+    const s = await sell("cash", [{ item_id: ids.hoodie, size: "Youth M", color: "Navy" }], { family: null });
+    expect((await linesOf(s.id))[0].color).toBeNull();
   });
   it("refuses an empty cart, a retired item, and bad quantities", async () => {
     await selling("cash", [], { family: null }).toThrow(/Add at least one item/);
@@ -189,7 +203,7 @@ describe("what goes on the receipt", () => {
     expect((await linesOf(s.id))[0].child_id).toBe(ids.ava);
   });
   it("remembers a child's uniform size from their first uniform, and keeps it after", async () => {
-    await sell("cash", [{ item_id: ids.tank, size: "Youth S", child_id: ids.ava }]);
+    await sell("cash", [{ item_id: ids.tank, size: "Youth S", color: "Red", child_id: ids.ava }]);
     await sell("cash", [{ item_id: ids.hoodie, size: "Youth M", child_id: ids.ava }]);
     const c = await pg.query<any>("select uniform_size from public.children where id = $1", [ids.ava]);
     expect(c.rows[0].uniform_size).toBe("Youth S");
@@ -218,7 +232,7 @@ describe("ways of paying", () => {
   it("free needs a reason and charges nothing on every line", async () => {
     await selling("free", [{ item_id: ids.bottle }], { family: null }).toThrow(/Say why there is no charge/);
     await selling("free", [{ item_id: ids.bottle }], { family: null, note: "   " }).toThrow(/Say why there is no charge/);
-    const s = await sell("free", [{ item_id: ids.tank, size: "Youth M", quantity: 2 }], { family: null, note: "Replacement for a torn one" });
+    const s = await sell("free", [{ item_id: ids.tank, size: "Youth M", color: "Navy", quantity: 2 }], { family: null, note: "Replacement for a torn one" });
     expect(s).toMatchObject({ status: "done", total_cents: 0, note: "Replacement for a torn one" });
     expect((await linesOf(s.id))[0].unit_cents).toBe(0);
   });
@@ -229,19 +243,19 @@ describe("ways of paying", () => {
 
   describe("ESA", () => {
     it("puts a required uniform for an ESA child on their next invoice", async () => {
-      const s = await sell("esa", [{ item_id: ids.tank, size: "Youth M", child_id: ids.ava }]);
+      const s = await sell("esa", [{ item_id: ids.tank, size: "Youth M", color: "Navy", child_id: ids.ava }]);
       expect(s).toMatchObject({ status: "on_esa", total_cents: 2500, paid_at: null });
     });
     it("needs a family billed in Family Desk", async () => {
-      await selling("esa", [{ item_id: ids.tank, size: "Youth M" }], { family: null }).toThrow(/Pick the family first/);
-      await selling("esa", [{ item_id: ids.tank, size: "Youth M", child_id: ids.cal }], { family: ids.samples }).toThrow(/still billed in Jackrabbit/);
+      await selling("esa", [{ item_id: ids.tank, size: "Youth M", color: "Navy" }], { family: null }).toThrow(/Pick the family first/);
+      await selling("esa", [{ item_id: ids.tank, size: "Youth M", color: "Navy", child_id: ids.cal }], { family: ids.samples }).toThrow(/still billed in Jackrabbit/);
     });
     it("takes only required uniforms, each named for a child with an active ESA class", async () => {
       await selling("esa", [{ item_id: ids.bottle, child_id: ids.ava }]).toThrow(/not a required uniform, so ESA can't pay for it/);
-      await selling("esa", [{ item_id: ids.tank, size: "Youth M" }]).toThrow(/Pick which child each uniform is for/);
-      await selling("esa", [{ item_id: ids.tank, size: "Youth M", child_id: ids.ben }]).toThrow(/Ben has no active ESA class/);
+      await selling("esa", [{ item_id: ids.tank, size: "Youth M", color: "Navy" }]).toThrow(/Pick which child each uniform is for/);
+      await selling("esa", [{ item_id: ids.tank, size: "Youth M", color: "Navy", child_id: ids.ben }]).toThrow(/Ben has no active ESA class/);
       await pg.query("update public.enrollments set status = 'dropped' where child_id = $1", [ids.ava]);
-      await selling("esa", [{ item_id: ids.tank, size: "Youth M", child_id: ids.ava }]).toThrow(/Ava has no active ESA class/);
+      await selling("esa", [{ item_id: ids.tank, size: "Youth M", color: "Navy", child_id: ids.ava }]).toThrow(/Ava has no active ESA class/);
     });
   });
 });
@@ -253,8 +267,8 @@ describe("after the sale: what a staff session may change", () => {
     const s = await sell("cash", [{ item_id: ids.bottle }]);
     await setSale(s.id, { total_cents: 1, pay: "free", site_id: "goodyear", family_id: ids.samples, note: "A note is fine" });
     expect(await sale(s.id)).toMatchObject({ total_cents: 1000, pay: "cash", site_id: "surprise", family_id: ids.testers, note: "A note is fine" });
-    await pg.query("update public.store_sale_lines set name = 'Gold bar', quantity = 50, unit_cents = 1, handed_out_at = now() where sale_id = $1", [s.id]);
-    expect((await linesOf(s.id))[0]).toMatchObject({ name: "Water bottle", quantity: 1, unit_cents: 1000 });
+    await pg.query("update public.store_sale_lines set name = 'Gold bar', color = 'Gold', quantity = 50, unit_cents = 1, handed_out_at = now() where sale_id = $1", [s.id]);
+    expect((await linesOf(s.id))[0]).toMatchObject({ name: "Water bottle", color: null, quantity: 1, unit_cents: 1000 });
   });
   it("may void a cash sale, but a voided sale stays void", async () => {
     const s = await sell("cash", [{ item_id: ids.bottle }], { family: null });
@@ -301,7 +315,7 @@ describe("after the sale: the store function's service key", () => {
 
 describe("uniforms and ESA invoices", () => {
   async function esaSale(children = [ids.ava]) {
-    const s = await sell("esa", children.map((child_id) => ({ item_id: ids.tank, size: "Youth M", child_id })));
+    const s = await sell("esa", children.map((child_id) => ({ item_id: ids.tank, size: "Youth M", color: "Navy", child_id })));
     const lines = (await pg.query<any>("select id, child_id from public.store_sale_lines where sale_id = $1", [s.id])).rows;
     return { sale: s, lines };
   }

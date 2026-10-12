@@ -5,7 +5,7 @@
 // checked; the database refuses those changes from a staff member's own session.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { cors, json, userClient, stripe } from "./_shared.ts";
+import { cors, json, userClient, stripe, stripeKey } from "./_shared.ts";
 
 const PAID_URL = "https://app.hero.training/family-desk/paid.html";
 
@@ -223,7 +223,53 @@ Deno.serve(async (req: Request) => {
       return json({ sale_id: id, status: "void" });
     }
 
-    return json({ error: "action must be config, checkout, status or cancel" }, 400);
+    if (body.action === "charge") {
+      // Charge the family's card on file for a cart (a uniform request being filled). The family's Stripe customer
+      // lives on the main account, so this uses the main key, not the store's QR-code key. The sale is rung up
+      // through the caller's own session (prices from the list, their site rights), then charged with the
+      // service key; a charge that fails leaves the sale voided with the reason, never waiting.
+      const mainKey = stripeKey();
+      if (!mainKey) return json({ error: "Stripe key not set in Supabase secrets, so the card on file can't be charged." }, 503);
+      const c = body.cart ?? {};
+      const { data: fam, error: ferr } = await db.from("families").select("id, name, stripe_customer_id").eq("id", String(c.family_id ?? "")).maybeSingle();
+      if (ferr) return json({ error: ferr.message }, 400);
+      if (!fam) return json({ error: "Family not found, or not yours to see" }, 404);
+      if (!fam.stripe_customer_id) return json({ error: `${fam.name} has no Stripe customer, so there is no card on file.` }, 409);
+
+      // The card: the customer's default, else their first saved card.
+      const cust = await stripe(mainKey, "GET", `/v1/customers/${fam.stripe_customer_id}`);
+      let pm: string | null = cust.invoice_settings?.default_payment_method ?? null;
+      if (!pm) { const pms = await stripe(mainKey, "GET", "/v1/payment_methods", { customer: fam.stripe_customer_id, type: "card", limit: 1 }); pm = pms.data?.[0]?.id ?? null; }
+      if (!pm) return json({ error: `${fam.name} has no card saved in Stripe. Take payment another way.` }, 409);
+
+      const { data: made, error: serr } = await db.rpc("store_create_sale", {
+        p_site: c.site_id ?? null, p_family: fam.id, p_pay: "card", p_card_tapped: false, p_note: c.note ?? null, p_lines: c.lines ?? [],
+      });
+      if (serr) return json({ error: serr.message }, 400);
+      const saleId = made.id as string, amount = made.total_cents as number;
+
+      let intent: any;
+      try {
+        intent = await stripe(mainKey, "POST", "/v1/payment_intents", {
+          amount, currency: "usd", customer: fam.stripe_customer_id, payment_method: pm, off_session: true, confirm: true,
+          description: "HERO uniform, card on file", metadata: { family_desk_sale: saleId, site: made.site_id, family: fam.name },
+        }, saleId);
+      } catch (perr) {
+        const why = (perr as Error).message;
+        await admin.from("store_sales").update({ status: "void", note: `Card on file declined: ${why}`, settled_by: staff.id }).eq("id", saleId).eq("status", "waiting");
+        return json({ error: `The card on file was declined: ${why}`, sale_id: saleId, status: "void" }, 402);
+      }
+      if (intent.status !== "succeeded") {
+        await admin.from("store_sales").update({ status: "void", note: `Card on file: payment ${intent.status}`, settled_by: staff.id }).eq("id", saleId).eq("status", "waiting");
+        return json({ error: `The card on file didn't go through (${intent.status}). Take payment another way.`, sale_id: saleId, status: "void" }, 402);
+      }
+      const { error: uerr } = await admin.from("store_sales").update({ status: "done", settled_by: staff.id, stripe_payment_intent_id: intent.id, stripe_live: !!intent.livemode }).eq("id", saleId).eq("status", "waiting");
+      if (uerr) return json({ error: `Stripe charged ${fam.name}'s card (${intent.id}), but Family Desk did not record it: ${uerr.message}`, sale_id: saleId }, 500);
+      const card = intent.payment_method_details?.card ?? intent.charges?.data?.[0]?.payment_method_details?.card ?? null;
+      return json({ sale_id: saleId, status: "paid", amount, live: !!intent.livemode, last4: card?.last4 ?? null, brand: card?.brand ?? null });
+    }
+
+    return json({ error: "action must be config, checkout, status, cancel or charge" }, 400);
   } catch (e) {
     return json({ error: (e as Error).message }, 502);
   }

@@ -13,7 +13,7 @@ function noonArizona(y: number, m: number, d: number): number {
   return Math.floor(Date.UTC(y, m - 1, d, 19, 0, 0) / 1000);
 }
 
-type Uniform = { id: string; sale_id: string; name: string; size: string | null; quantity: number; unit_cents: number };
+type Uniform = { id: string; sale_id: string; name: string; size: string | null; color: string | null; quantity: number; unit_cents: number };
 
 // Required uniforms bought on ESA at the front desk ride on the child's next invoice. Claiming them (tying each line
 // to this invoice row) keeps another invoice from taking them too; if the invoice is then thrown away, the lines are
@@ -32,7 +32,7 @@ async function claimUniforms(db: any, childId: string, invoiceId: string): Promi
     .update({ esa_invoice_id: invoiceId })
     .in("id", pending.map((p: any) => p.id))
     .is("esa_invoice_id", null)
-    .select("id, sale_id, name, size, quantity, unit_cents");
+    .select("id, sale_id, name, size, color, quantity, unit_cents");
   return cerr ? [] : (claimed ?? []);
 }
 
@@ -151,7 +151,7 @@ Deno.serve(async (req: Request) => {
             invoice: inv.id,
             amount: u.unit_cents * u.quantity,
             currency: "usd",
-            description: `${u.name}${u.size ? ` (${u.size})` : ""}${u.quantity > 1 ? ` × ${u.quantity}` : ""}: ${student}, required HERO uniform`,
+            description: `${u.name}${u.color ? `, ${u.color}` : ""}${u.size ? ` (${u.size})` : ""}${u.quantity > 1 ? ` × ${u.quantity}` : ""}: ${student}, required HERO uniform`,
             metadata: { student, store_line: u.id },
           });
         }

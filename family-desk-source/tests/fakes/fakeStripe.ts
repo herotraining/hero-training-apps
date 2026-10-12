@@ -8,9 +8,16 @@ export type Session = {
   amount_total: number; currency: string; client_reference_id: string | null; expires_at: number; params: Record<string, string>;
 };
 
+export type Customer = { id: string; default_payment_method: string | null; cards: { id: string; last4: string; brand: string }[]; livemode?: boolean };
+export type Intent = { id: string; status: string; amount: number; currency: string; customer: string; payment_method: string; livemode: boolean; params: Record<string, string>; idempotency_key: string | null };
+
 export class FakeStripe {
   invoices = new Map<string, Invoice>();
   sessions = new Map<string, Session>();
+  customers = new Map<string, Customer>();
+  intents = new Map<string, Intent>();
+  // What the next card charge does: succeed, be declined with this message, or end in this non-success status.
+  nextCharge: { declined?: string; status?: string } = {};
   calls: { method: string; path: string; params: Record<string, string> }[] = [];
   // Runs right after a Checkout Session is made, before the function gets the reply (to stage a race in a test).
   afterSessionCreated: ((s: Session) => void) | null = null;
@@ -38,6 +45,13 @@ export class FakeStripe {
     return s;
   }
 
+  addCustomer(id: string, cards: { last4: string; brand?: string }[], defaultFirst = true): Customer {
+    const c: Customer = { id, cards: cards.map((k, i) => ({ id: `pm_test_${id}_${i + 1}`, last4: k.last4, brand: k.brand ?? "visa" })), default_payment_method: null };
+    if (defaultFirst && c.cards.length) c.default_payment_method = c.cards[0].id;
+    this.customers.set(id, c);
+    return c;
+  }
+
   // The parent paid on Stripe's page.
   pay(id: string) { const s = this.sessions.get(id)!; s.status = "complete"; s.payment_status = "paid"; }
   // Complete but the money hasn't settled yet.
@@ -49,7 +63,9 @@ export class FakeStripe {
     if (url.hostname !== "api.stripe.com") throw new Error(`Test tried to reach ${url.hostname}; only the fake Stripe is allowed`);
     const method = (init.method ?? "GET").toUpperCase();
     const params = Object.fromEntries(new URLSearchParams(method === "GET" ? url.search : String(init.body ?? "")));
-    const key = String((init.headers as Record<string, string>)?.Authorization ?? "").replace("Bearer ", "");
+    const headers = (init.headers ?? {}) as Record<string, string>;
+    const key = String(headers.Authorization ?? "").replace("Bearer ", "");
+    if (headers["Idempotency-Key"]) params.__idempotency_key = headers["Idempotency-Key"];
     this.calls.push({ method, path: url.pathname, params });
 
     const i = this.failures.findIndex((f) => f.method === method && f.path.test(url.pathname));
@@ -111,6 +127,33 @@ export class FakeStripe {
         s.status = "expired";
         return this.reply(200, s);
       }
+    }
+    // Customers, saved cards and card-on-file charges (the store's charge action).
+    const cm = /^\/v1\/customers\/([^/]+)$/.exec(path);
+    if (cm && method === "GET") {
+      const c = this.customers.get(cm[1]);
+      if (!c) return this.reply(404, { error: { message: `No such customer: '${cm[1]}'` } });
+      return this.reply(200, { id: c.id, invoice_settings: { default_payment_method: c.default_payment_method } });
+    }
+    if (method === "GET" && path === "/v1/payment_methods") {
+      const c = this.customers.get(params.customer);
+      return this.reply(200, { data: (c?.cards ?? []).map((k) => ({ id: k.id, type: "card", card: { last4: k.last4, brand: k.brand } })) });
+    }
+    if (method === "POST" && path === "/v1/payment_intents") {
+      const c = this.customers.get(params.customer);
+      const card = c?.cards.find((k) => k.id === params.payment_method);
+      if (!c || !card) return this.reply(400, { error: { message: "No such PaymentMethod" } });
+      const idem = params.__idempotency_key ?? null;
+      const prior = idem ? [...this.intents.values()].find((i) => i.idempotency_key === idem) : null;
+      if (prior) return this.reply(200, prior);
+      const next = this.nextCharge; this.nextCharge = {};
+      if (next.declined) return this.reply(402, { error: { message: next.declined, code: "card_declined" } });
+      const pi: Intent = {
+        id: `pi_test_${++this.n}`, status: next.status ?? "succeeded", amount: Number(params.amount), currency: params.currency, customer: c.id, payment_method: card.id,
+        livemode: live, params, idempotency_key: idem,
+      };
+      this.intents.set(pi.id, pi);
+      return this.reply(200, { ...pi, payment_method_details: { card: { last4: card.last4, brand: card.brand } } });
     }
     return this.reply(404, { error: { message: `No such route: ${method} ${path}` } });
   }

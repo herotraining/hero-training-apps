@@ -1,6 +1,6 @@
 import type { Api } from "./api";
 import { supabase, functionsUrl } from "./supabase";
-import { AGREEMENT_KINDS, type Family, type Program, type RosterRow } from "../types";
+import { AGREEMENT_KINDS, type Family, type Program, type RosterRow, type StoreSale } from "../types";
 
 async function callFunction<T>(name: string, body: unknown): Promise<T> {
   const sb = supabase();
@@ -183,6 +183,33 @@ export function supabaseApi(): Api {
       fail(error);
       return data ?? [];
     },
+    storeConfig: () => callFunction("store", { action: "config" }),
+    async storeItems() { const { data, error } = await sb.from("store_items").select("id, name, kind, price_cents, sizes, esa_ok, active, sort").order("sort").order("name"); fail(error); return data ?? []; },
+    async saveStoreItem(i) {
+      const { id, ...rest } = i;
+      const { error } = id ? await sb.from("store_items").update(rest).eq("id", id) : await sb.from("store_items").insert(rest);
+      fail(error);
+    },
+    async storeSales(sinceIso) {
+      const { data, error } = await sb
+        .from("store_sales")
+        .select("id, family_id, site_id, pay, status, total_cents, stripe_checkout_id, stripe_url, stripe_live, note, paid_at, created_at, lines:store_sale_lines(id, sale_id, item_id, child_id, name, size, quantity, unit_cents, esa_invoice_id, handed_out_at, child:children(first_name, last_name)), family:families(name), seller:staff(name)")
+        .gte("created_at", sinceIso)
+        .order("created_at", { ascending: false })
+        .limit(300);
+      fail(error);
+      return (data ?? []) as unknown as StoreSale[];
+    },
+    async sell(s) {
+      const { data, error } = await sb.rpc("store_create_sale", { p_site: s.site_id, p_family: s.family_id, p_pay: s.pay, p_card_tapped: !!s.card_tapped, p_note: s.note, p_lines: s.lines });
+      fail(error);
+      return data as StoreSale;
+    },
+    storeCheckout: (s) => callFunction("store", "sale_id" in s ? { action: "checkout", sale_id: s.sale_id } : { action: "checkout", cart: { site_id: s.site_id, family_id: s.family_id, note: s.note, lines: s.lines } }),
+    storeStatus: (saleId) => callFunction("store", { action: "status", sale_id: saleId }),
+    storeCancel: (saleId, reason) => callFunction("store", { action: "cancel", sale_id: saleId, reason }),
+    async voidSale(saleId, note) { const { error } = await sb.from("store_sales").update({ status: "void", note }).eq("id", saleId); fail(error); },
+    async setHandedOut(lineId, handed) { const { error } = await sb.from("store_sale_lines").update({ handed_out_at: handed ? new Date().toISOString() : null }).eq("id", lineId); fail(error); },
     async staff() { const { data, error } = await sb.from("staff").select("*").order("name"); fail(error); return data ?? []; },
     async addStaff(s) { const { error } = await sb.from("staff").insert(s); fail(error); },
     async setStaffActive(id, active) { const { error } = await sb.from("staff").update({ active }).eq("id", id); fail(error); },

@@ -1,6 +1,6 @@
 // Made-up data mirroring the practice families, for screenshots and design work without a sign-in.
 import type { Api } from "./api";
-import type { Child, ClassWalletDeposit, Enrollment, EsaInvoice, Family, FeedItem, JackrabbitLine, Program, RosterRow, Staff, TrainerPay } from "../types";
+import type { Child, ClassWalletDeposit, Enrollment, EsaInvoice, Family, FeedItem, JackrabbitLine, NewSale, Program, RosterRow, Staff, StoreItem, StoreSale, TrainerPay } from "../types";
 
 const sites = [
   { id: "peoria", name: "Peoria", gym: "Oasis Gymnastics", city: "Peoria" },
@@ -46,26 +46,26 @@ function child(id: string, family_id: string, first: string, last: string, birth
 let families: Family[] = [
   { id: "fa", name: "Test Family A", site_id: "peoria", pay_method: "esa", stripe_customer_id: "cus_A", city: "Surprise", zip: "85379", text_consent: true, notes: "Practice family: ESA, one child, Tuesday co-op.", status: "active",
     guardians: [{ id: "ga", family_id: "fa", name: "Alex Anderson", email: "test.family.a@example.com", mobile: "(602) 555-0101", is_primary: true }],
-    children: [child("ca1", "fa", "Avery", "Anderson", "2018-03-14", "peoria", "YM", true, "Lion", { emergency_contacts: [{ name: "Grandma Anderson", phone: "(602) 555-0201" }], authorized_pickups: ["Alex Anderson", "Grandma Anderson"] }, [["coop-peoria-tue", "esa", "active"]])].map((k) => ({ ...k, enrollments: [...(k.enrollments ?? []), { id: "ca1-past", child_id: "ca1", program_id: "tumbling-peoria-fri", status: "dropped" as const, pay: "esa" as const, start_date: "2025-09-01", end_date: "2026-05-31", note: "Dropped in Jackrabbit: Summer break", program: P["tumbling-peoria-fri"] }] })),
+    children: [child("ca1", "fa", "Avery", "Anderson", "2018-03-14", "peoria", "Youth M", true, "Lion", { emergency_contacts: [{ name: "Grandma Anderson", phone: "(602) 555-0201" }], authorized_pickups: ["Alex Anderson", "Grandma Anderson"] }, [["coop-peoria-tue", "esa", "active"]])].map((k) => ({ ...k, enrollments: [...(k.enrollments ?? []), { id: "ca1-past", child_id: "ca1", program_id: "tumbling-peoria-fri", status: "dropped" as const, pay: "esa" as const, start_date: "2025-09-01", end_date: "2026-05-31", note: "Dropped in Jackrabbit: Summer break", program: P["tumbling-peoria-fri"] }] })),
     agreements: [{ id: "1", kind: "waiver", signed_at: "2026-09-18", signed_by: "Alex Anderson" }, { id: "2", kind: "photo_release", signed_at: "2026-09-18", signed_by: "Alex Anderson" }, { id: "3", kind: "policies", signed_at: "2026-09-18", signed_by: "Alex Anderson" }] },
   { id: "fb", name: "Test Family B", site_id: "peoria", pay_method: "private", stripe_customer_id: "cus_B", city: "Surprise", zip: "85379", text_consent: true, notes: "Practice family: card, Thursday co-op plus Friday tumbling.", status: "active",
     guardians: [{ id: "gb", family_id: "fb", name: "Bailey Brooks", email: "test.family.b@example.com", mobile: "(602) 555-0102", is_primary: true }],
-    children: [child("cb1", "fb", "Blake", "Brooks", "2016-06-02", "peoria", "YL", false, "Eagle", { allergies: "Peanuts (carries an EpiPen)", medications: "EpiPen in backpack", notes: "Check snacks on Thursdays.", emergency_contacts: [{ name: "Bailey Brooks", phone: "(602) 555-0102" }], authorized_pickups: ["Bailey Brooks"] }, [["coop-peoria-thu", "card", "active"], ["tumbling-peoria-fri", "card", "active"]])],
+    children: [child("cb1", "fb", "Blake", "Brooks", "2016-06-02", "peoria", "Youth L", false, "Eagle", { allergies: "Peanuts (carries an EpiPen)", medications: "EpiPen in backpack", notes: "Check snacks on Thursdays.", emergency_contacts: [{ name: "Bailey Brooks", phone: "(602) 555-0102" }], authorized_pickups: ["Bailey Brooks"] }, [["coop-peoria-thu", "card", "active"], ["tumbling-peoria-fri", "card", "active"]])],
     agreements: [{ id: "4", kind: "waiver", signed_at: "2026-09-18", signed_by: "Bailey Brooks" }, { id: "5", kind: "photo_release", signed_at: null, signed_by: null }, { id: "6", kind: "policies", signed_at: "2026-09-18", signed_by: "Bailey Brooks" }] },
   { id: "fc", name: "Test Family C", site_id: "peoria", pay_method: "private", stripe_customer_id: "cus_C", city: "Peoria", zip: "85383", text_consent: false, notes: "Practice family: two siblings on bank debit, Thursday co-op.", status: "active",
     guardians: [{ id: "gc", family_id: "fc", name: "Casey Carter Sr.", email: "test.family.c@example.com", mobile: "(602) 555-0103", is_primary: true }, { id: "gc2", family_id: "fc", name: "Chris Carter", email: "test.family.c2@example.com", mobile: "(602) 555-0113", is_primary: false }],
     children: [
-      child("cc1", "fc", "Casey", "Carter", "2020-09-21", "peoria", "YS", false, "Bear", { medications: "Inhaler for exercise; keep at the desk", emergency_contacts: [{ name: "Chris Carter", phone: "(602) 555-0113" }], authorized_pickups: ["Casey Carter Sr.", "Chris Carter"] }, [["coop-peoria-thu", "card", "active"]]),
-      child("cc2", "fc", "Cameron", "Carter", "2015-01-30", "peoria", "YXL", false, "Wolf", { emergency_contacts: [{ name: "Chris Carter", phone: "(602) 555-0113" }], authorized_pickups: ["Casey Carter Sr.", "Chris Carter"] }, [["coop-peoria-thu", "card", "active"]]),
+      child("cc1", "fc", "Casey", "Carter", "2020-09-21", "peoria", "Youth S", false, "Bear", { medications: "Inhaler for exercise; keep at the desk", emergency_contacts: [{ name: "Chris Carter", phone: "(602) 555-0113" }], authorized_pickups: ["Casey Carter Sr.", "Chris Carter"] }, [["coop-peoria-thu", "card", "active"]]),
+      child("cc2", "fc", "Cameron", "Carter", "2015-01-30", "peoria", "Youth XL", false, "Wolf", { emergency_contacts: [{ name: "Chris Carter", phone: "(602) 555-0113" }], authorized_pickups: ["Casey Carter Sr.", "Chris Carter"] }, [["coop-peoria-thu", "card", "active"]]),
     ],
     agreements: [{ id: "7", kind: "waiver", signed_at: "2026-09-18", signed_by: "Casey Carter Sr." }, { id: "8", kind: "photo_release", signed_at: "2026-09-18", signed_by: "Casey Carter Sr." }, { id: "9", kind: "policies", signed_at: "2026-09-18", signed_by: "Casey Carter Sr." }] },
   { id: "fd", name: "Test Family D", site_id: "peoria", pay_method: "split", stripe_customer_id: "cus_D", city: "Surprise", zip: "85379", text_consent: true, notes: "Practice family: Tuesday co-op on ESA, Rally Saber on card.", status: "active",
     guardians: [{ id: "gd", family_id: "fd", name: "Dana Dawson", email: "test.family.d@example.com", mobile: "(602) 555-0104", is_primary: true }],
-    children: [child("cd1", "fd", "Drew", "Dawson", "2014-05-11", "peoria", "AS", true, "Eagle", { allergies: "Bee stings", emergency_contacts: [{ name: "Dana Dawson", phone: "(602) 555-0104" }], authorized_pickups: ["Dana Dawson", "Uncle Dev"] }, [["coop-peoria-tue", "esa", "active"], ["rally-saber-peoria", "card", "active"]])],
+    children: [child("cd1", "fd", "Drew", "Dawson", "2014-05-11", "peoria", "Adult S", true, "Eagle", { allergies: "Bee stings", emergency_contacts: [{ name: "Dana Dawson", phone: "(602) 555-0104" }], authorized_pickups: ["Dana Dawson", "Uncle Dev"] }, [["coop-peoria-tue", "esa", "active"], ["rally-saber-peoria", "card", "active"]])],
     agreements: [{ id: "10", kind: "waiver", signed_at: "2026-09-18", signed_by: "Dana Dawson" }, { id: "11", kind: "photo_release", signed_at: "2026-09-18", signed_by: "Dana Dawson" }, { id: "12", kind: "policies", signed_at: "2026-09-18", signed_by: "Dana Dawson" }] },
   { id: "fe", name: "Test Family E", site_id: "mesa", pay_method: "esa", stripe_customer_id: "cus_E", city: "Mesa", zip: "85201", text_consent: true, notes: "Practice family: Mesa ESA, Wednesday co-op.", status: "active",
     guardians: [{ id: "ge", family_id: "fe", name: "Emerson Ellis", email: "test.family.e@example.com", mobile: "(480) 555-0105", is_primary: true }],
-    children: [child("ce1", "fe", "Emery", "Ellis", "2019-08-08", "mesa", "YM", true, "Lion", { emergency_contacts: [{ name: "Emerson Ellis", phone: "(480) 555-0105" }], authorized_pickups: ["Emerson Ellis"] }, [["coop-mesa-wed", "esa", "active"]])],
+    children: [child("ce1", "fe", "Emery", "Ellis", "2019-08-08", "mesa", "Youth M", true, "Lion", { emergency_contacts: [{ name: "Emerson Ellis", phone: "(480) 555-0105" }], authorized_pickups: ["Emerson Ellis"] }, [["coop-mesa-wed", "esa", "active"]])],
     agreements: [{ id: "13", kind: "waiver", signed_at: "2026-09-18", signed_by: "Emerson Ellis" }, { id: "14", kind: "photo_release", signed_at: "2026-09-18", signed_by: "Emerson Ellis" }, { id: "15", kind: "policies", signed_at: "2026-09-18", signed_by: "Emerson Ellis" }] },
   { id: "fg", name: "Test Family G", site_id: "peoria", pay_method: "private", stripe_customer_id: null, city: null, zip: null, text_consent: false, notes: "Inactive in Jackrabbit since Oct 9, 2026.", status: "left",
     guardians: [{ id: "gg", family_id: "fg", name: "Gale Gordon", email: "test.family.g@example.com", mobile: "(602) 555-0107", is_primary: true }],
@@ -74,8 +74,8 @@ let families: Family[] = [
   { id: "ff", name: "DEV Family F", site_id: "peoria", pay_method: "private", stripe_customer_id: null, city: "Glendale", zip: "85308", text_consent: true, notes: "Development family. Safe to change or delete.", status: "active",
     guardians: [{ id: "gf", family_id: "ff", name: "Frankie Fox", email: "dev.family.f@example.com", mobile: "(623) 555-0106", is_primary: true }],
     children: [
-      child("cf1", "ff", "Finley", "Fox", "2017-11-23", "peoria", "YM", false, "Bear", { allergies: "Dairy (mild)", emergency_contacts: [{ name: "Frankie Fox", phone: "(623) 555-0106" }], authorized_pickups: ["Frankie Fox"] }, [["tumbling-peoria-fri", "card", "active"], ["coop-peoria-tue", "card", "waitlist"]]),
-      child("cf2", "ff", "Flynn", "Fox", "2019-02-14", "peoria", "YS", false, "Wolf", { emergency_contacts: [{ name: "Frankie Fox", phone: "(623) 555-0106" }], authorized_pickups: ["Frankie Fox"] }, [["tumbling-peoria-fri", "card", "active"]]),
+      child("cf1", "ff", "Finley", "Fox", "2017-11-23", "peoria", "Youth M", false, "Bear", { allergies: "Dairy (mild)", emergency_contacts: [{ name: "Frankie Fox", phone: "(623) 555-0106" }], authorized_pickups: ["Frankie Fox"] }, [["tumbling-peoria-fri", "card", "active"], ["coop-peoria-tue", "card", "waitlist"]]),
+      child("cf2", "ff", "Flynn", "Fox", "2019-02-14", "peoria", "Youth S", false, "Wolf", { emergency_contacts: [{ name: "Frankie Fox", phone: "(623) 555-0106" }], authorized_pickups: ["Frankie Fox"] }, [["tumbling-peoria-fri", "card", "active"]]),
     ],
     agreements: [{ id: "16", kind: "waiver", signed_at: "2026-09-18", signed_by: "Frankie Fox" }, { id: "17", kind: "photo_release", signed_at: "2026-09-18", signed_by: "Frankie Fox" }, { id: "18", kind: "policies", signed_at: "2026-09-18", signed_by: "Frankie Fox" }] },
 ];
@@ -107,6 +107,37 @@ const pay: TrainerPay[] = [
   { id: "p4", paid_on: "2026-09-16", payee: "Zoe Zimmer", amount_cents: 40000, memo: "Hero Trainer paycheck 9/1-9/15 16hrs", period: "9/1-9/15", hours: 16, kind: "trainer" },
   { id: "p5", paid_on: "2026-09-16", payee: "Kai Kim", amount_cents: 54000, memo: "Hero Trainer paycheck 9/1-9/15 18hrs", period: "9/1-9/15", hours: 18, kind: "trainer" },
 ];
+
+const SIZES = ["Youth XS", "Youth S", "Youth M", "Youth L", "Youth XL", "Adult S", "Adult M", "Adult L", "Adult XL", "Adult 2XL"];
+let storeItems: StoreItem[] = [
+  { id: "si1", name: "HERO uniform tank top", kind: "uniform", price_cents: 2500, sizes: SIZES, esa_ok: true, active: true, sort: 10 },
+  { id: "si2", name: "HERO uniform T-shirt", kind: "uniform", price_cents: 2500, sizes: SIZES, esa_ok: true, active: true, sort: 20 },
+  { id: "si3", name: "HERO uniform hoodie", kind: "uniform", price_cents: 2500, sizes: SIZES, esa_ok: true, active: true, sort: 30 },
+  { id: "si4", name: "Extra HERO T-shirt", kind: "gear", price_cents: 1500, sizes: SIZES, esa_ok: false, active: true, sort: 40 },
+];
+const ago = (min: number) => new Date(Date.now() - min * 60000).toISOString();
+const kidName = (id: string) => { const c = families.flatMap((f) => f.children ?? []).find((k) => k.id === id); return c ? { first_name: c.first_name, last_name: c.last_name } : null; };
+const line = (sale: string, n: number, item: StoreItem, size: string | null, child: string | null, handed: string | null, qty = 1, unit = item.price_cents) =>
+  ({ id: `${sale}-l${n}`, sale_id: sale, item_id: item.id, child_id: child, name: item.name, size, quantity: qty, unit_cents: unit, esa_invoice_id: null, handed_out_at: handed, child: child ? kidName(child) : null });
+let storeSales: StoreSale[] = [
+  { id: "ms1", family_id: "fa", site_id: "peoria", pay: "esa", status: "on_esa", total_cents: 2500, stripe_checkout_id: null, stripe_url: null, stripe_live: null, note: null, paid_at: null, created_at: ago(40), lines: [line("ms1", 1, storeItems[1], "Youth M", "ca1", null)], family: { name: "Test Family A" }, seller: { name: "Mike" } },
+  { id: "ms2", family_id: null, site_id: "peoria", pay: "card", status: "done", total_cents: 1500, stripe_checkout_id: null, stripe_url: null, stripe_live: null, note: null, paid_at: ago(130), created_at: ago(130), lines: [line("ms2", 1, storeItems[3], "Adult L", null, ago(129))], family: null, seller: { name: "Lisa" } },
+  { id: "ms3", family_id: "ff", site_id: "peoria", pay: "jackrabbit", status: "done", total_cents: 2500, stripe_checkout_id: null, stripe_url: null, stripe_live: null, note: null, paid_at: null, created_at: ago(60 * 26), lines: [line("ms3", 1, storeItems[0], "Youth M", "cf1", null)], family: { name: "DEV Family F" }, seller: { name: "Lisa" } },
+  { id: "ms4", family_id: "fb", site_id: "peoria", pay: "card", status: "done", total_cents: 2500, stripe_checkout_id: "cs_test_1", stripe_url: null, stripe_live: false, note: null, paid_at: ago(60 * 50), created_at: ago(60 * 50), lines: [line("ms4", 1, storeItems[2], "Youth L", "cb1", ago(60 * 50))], family: { name: "Test Family B" }, seller: { name: "Mike" } },
+];
+const demoSessions = new Map<string, number>();
+function mockSale(s: NewSale, status: StoreSale["status"]): StoreSale {
+  const f = families.find((x) => x.id === s.family_id) ?? null;
+  if ((s.pay === "esa" || s.pay === "jackrabbit") && !f) throw new Error("Pick the family first.");
+  if (s.pay === "esa" && !f?.stripe_customer_id) throw new Error("This family is still billed in Jackrabbit. Add it to their Jackrabbit account instead.");
+  if (s.pay === "jackrabbit" && f?.stripe_customer_id) throw new Error("This family is billed in Family Desk now, not Jackrabbit.");
+  if (s.pay === "free" && !s.note?.trim()) throw new Error("Say why there is no charge.");
+  const id = "ms" + Date.now();
+  const lines = s.lines.map((l, i) => { const it = storeItems.find((x) => x.id === l.item_id)!; return line(id, i, it, l.size, l.child_id, null, l.quantity, s.pay === "free" ? 0 : it.price_cents); });
+  const sale: StoreSale = { id, family_id: f?.id ?? null, site_id: s.site_id, pay: s.pay, status, total_cents: lines.reduce((n, l) => n + l.unit_cents * l.quantity, 0), stripe_checkout_id: null, stripe_url: null, stripe_live: null, note: s.note, paid_at: status === "done" && s.pay !== "jackrabbit" ? new Date().toISOString() : null, created_at: new Date().toISOString(), lines, family: f ? { name: f.name } : null, seller: { name: "Mike" } };
+  storeSales = [sale, ...storeSales];
+  return sale;
+}
 
 let staff: Staff[] = [
   { id: "s1", user_id: "u1", email: "mike@example.com", name: "Mike", role: "owner", site_id: null, active: true },
@@ -211,6 +242,35 @@ export function mockApi(): Api {
     async classwalletDeposits(sinceIso) { await sleep(60); return deposits.filter((d) => d.on_date >= sinceIso); },
     async setDepositStatus(id, status, note) { deposits = deposits.map((d) => (d.id === id ? { ...d, status, note: note === undefined ? d.note : note } : d)); },
     async trainerPay(sinceIso) { await sleep(60); return pay.filter((p) => p.paid_on >= sinceIso); },
+    async storeConfig() { return { card: "practice" }; },
+    async storeItems() { await sleep(60); return storeItems.slice().sort((a, b) => a.sort - b.sort); },
+    async saveStoreItem(i) { if (i.id) storeItems = storeItems.map((x) => (x.id === i.id ? { ...x, ...i, id: i.id! } : x)); else storeItems = [...storeItems, { ...i, id: "si" + Date.now() }]; },
+    async storeSales(sinceIso) { await sleep(60); return storeSales.filter((s) => s.created_at >= sinceIso); },
+    async sell(s) { await sleep(150); return mockSale(s, s.pay === "card" ? "done" : s.pay === "esa" ? "on_esa" : "done"); },
+    async storeCheckout(s) {
+      await sleep(300);
+      const sale = "sale_id" in s ? storeSales.find((x) => x.id === s.sale_id)! : mockSale(s, "waiting");
+      if (sale.status === "done") return { sale_id: sale.id, status: "paid" };
+      sale.stripe_checkout_id = "cs_test_demo_" + sale.id; sale.stripe_url = "https://checkout.stripe.com/c/pay/cs_test_demo"; sale.stripe_live = false;
+      demoSessions.set(sale.id, Date.now());
+      return { sale_id: sale.id, status: "waiting", url: sale.stripe_url, live: false, expires_at: Math.floor(Date.now() / 1000) + 3600 };
+    },
+    async storeStatus(saleId) {
+      // In the demo, the parent "pays" eight seconds after the QR code appears.
+      const out = storeSales.filter((s) => s.pay === "card" && (saleId ? s.id === saleId : s.status === "waiting")).map((s) => {
+        if (s.status === "waiting" && Date.now() - (demoSessions.get(s.id) ?? Date.now()) > 8000) { s.status = "done"; s.paid_at = new Date().toISOString(); }
+        return { id: s.id, status: s.status === "done" ? "paid" : s.status, url: s.stripe_url, live: s.stripe_live };
+      });
+      return { sales: out };
+    },
+    async storeCancel(saleId, reason) { storeSales = storeSales.map((s) => (s.id === saleId ? { ...s, status: "void", note: reason } : s)); return { sale_id: saleId, status: "void" }; },
+    async voidSale(saleId, note) {
+      const s = storeSales.find((x) => x.id === saleId)!;
+      if (s.pay === "card" && s.status === "done") throw new Error("This card payment went through. Refund it in Stripe instead.");
+      if (s.status === "invoiced") throw new Error("This uniform is already on an ESA invoice.");
+      storeSales = storeSales.map((x) => (x.id === saleId ? { ...x, status: "void", note } : x));
+    },
+    async setHandedOut(lineId, handed) { storeSales = storeSales.map((s) => ({ ...s, lines: s.lines.map((l) => (l.id === lineId ? { ...l, handed_out_at: handed ? new Date().toISOString() : null } : l)) })); },
     async staff() { return staff; },
     async addStaff(s) { staff = [...staff, { id: `s${staff.length + 1}`, user_id: null, active: true, ...s }]; },
     async setStaffActive(id, active) { staff = staff.map((s) => (s.id === id ? { ...s, active } : s)); },

@@ -7,6 +7,7 @@ import { Today } from "./screens/Today";
 import { Families } from "./screens/Families";
 import { Family } from "./screens/Family";
 import { Money } from "./screens/Money";
+import { Store } from "./screens/Store";
 import { StaffScreen } from "./screens/StaffScreen";
 import { Programs } from "./screens/Programs";
 import { ErrorBox, Icon } from "./ui";
@@ -36,6 +37,7 @@ function Screens({ signOut }: { signOut: () => void }) {
   if (route.name === "families" && staff.role !== "coach") screen = <Families staff={staff} />;
   else if (route.name === "family" && staff.role !== "coach") screen = <Family id={route.id} staff={staff} />;
   else if (route.name === "money" && canMoney) screen = <Money />;
+  else if (route.name === "store" && canMoney) screen = <Store key={route.familyId ?? ""} staff={staff} familyId={route.familyId} />;
   else if (route.name === "staff" && staff.role === "owner") screen = <StaffScreen />;
   else if (route.name === "programs" && staff.role === "owner") screen = <Programs />;
   else screen = <Today staff={staff} />;

@@ -1,5 +1,5 @@
 // One data layer with two backs: Supabase for real use, built-in made-up data when VITE_MOCK=1.
-import type { JackrabbitLine, Attendance, CareInput, Child, ChildInput, ClassWalletDeposit, Closure, ClosureInput, EnrollmentInput, EsaInvoice, Family, FamilyInput, FeedItem, GuardianInput, Program, ProgramInput, Profile, RosterRow, Site, Staff, StripePicture, TrainerPay } from "../types";
+import type { JackrabbitLine, Attendance, CareInput, CheckoutState, Child, ChildInput, ClassWalletDeposit, Closure, ClosureInput, EnrollmentInput, EsaInvoice, Family, FamilyInput, FeedItem, GuardianInput, NewSale, Program, ProgramInput, Profile, RosterRow, Site, Staff, StoreConfig, StoreItem, StoreItemInput, StoreSale, StripePicture, TrainerPay } from "../types";
 
 export interface Api {
   mock: boolean;
@@ -34,6 +34,18 @@ export interface Api {
   classwalletDeposits(sinceIso: string): Promise<ClassWalletDeposit[]>;
   setDepositStatus(id: string, status: ClassWalletDeposit["status"], note?: string | null): Promise<void>;
   trainerPay(sinceIso: string): Promise<TrainerPay[]>;
+  storeConfig(): Promise<StoreConfig>;
+  storeItems(): Promise<StoreItem[]>;
+  saveStoreItem(i: StoreItemInput): Promise<void>;
+  storeSales(sinceIso: string): Promise<StoreSale[]>;
+  /** Ring up a sale paid any way but the QR code (Tap to Pay done, ESA, Jackrabbit, cash, no charge). */
+  sell(s: NewSale): Promise<StoreSale>;
+  /** Card by QR code: make (or reopen) the sale's Stripe payment page. */
+  storeCheckout(s: NewSale | { sale_id: string }): Promise<CheckoutState>;
+  storeStatus(saleId?: string): Promise<{ sales: { id: string; status: string; url?: string | null; live?: boolean | null }[] }>;
+  storeCancel(saleId: string, reason: string): Promise<CheckoutState>;
+  voidSale(saleId: string, note: string): Promise<void>;
+  setHandedOut(lineId: string, handed: boolean): Promise<void>;
   staff(): Promise<Staff[]>;
   addStaff(s: { email: string; name: string; role: Staff["role"]; site_id: string | null }): Promise<void>;
   setStaffActive(id: string, active: boolean): Promise<void>;

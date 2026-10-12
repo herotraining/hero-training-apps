@@ -166,6 +166,48 @@ export interface TrainerPay {
   kind: "trainer" | "facility" | "other";
 }
 
+// Store: uniforms and gear sold at the front desk. Card payments happen on Stripe's pages, never here.
+export type StoreKind = "uniform" | "gear" | "other";
+export interface StoreItem { id: string; name: string; kind: StoreKind; price_cents: number; sizes: string[]; esa_ok: boolean; active: boolean; sort: number }
+export type StoreItemInput = { id?: string; name: string; kind: StoreKind; price_cents: number; sizes: string[]; esa_ok: boolean; active: boolean; sort: number };
+export type StorePay = "card" | "esa" | "jackrabbit" | "cash" | "free";
+export type StoreStatus = "waiting" | "done" | "on_esa" | "invoiced" | "void";
+export interface StoreLine {
+  id: string;
+  sale_id: string;
+  item_id: string | null;
+  child_id: string | null;
+  name: string;
+  size: string | null;
+  quantity: number;
+  unit_cents: number;
+  esa_invoice_id: string | null;
+  handed_out_at: string | null;
+  child?: { first_name: string; last_name: string } | null;
+}
+export interface StoreSale {
+  id: string;
+  family_id: string | null;
+  site_id: string;
+  pay: StorePay;
+  status: StoreStatus;
+  total_cents: number;
+  stripe_checkout_id: string | null;
+  stripe_url: string | null;
+  stripe_live: boolean | null;
+  note: string | null;
+  paid_at: string | null;
+  created_at: string;
+  lines: StoreLine[];
+  family?: { name: string } | null;
+  seller?: { name: string } | null;
+}
+export interface CartLine { key: string; item_id: string; name: string; size: string | null; quantity: number; unit_cents: number; child_id: string | null; child_name: string | null; esa_ok: boolean }
+export type NewSale = { site_id: string; family_id: string | null; pay: StorePay; card_tapped?: boolean; note: string | null; lines: { item_id: string; size: string | null; quantity: number; child_id: string | null }[] };
+// What the store function says about a card sale's Stripe payment page.
+export interface CheckoutState { sale_id: string; status: string; url?: string | null; live?: boolean | null; expires_at?: number; note?: string }
+export interface StoreConfig { card: "off" | "practice" | "live"; why?: string }
+
 export interface StripePicture {
   family: string;
   customer?: string;

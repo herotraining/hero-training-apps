@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import type { ClassWalletDeposit, EsaInvoice } from "../types";
-import { arizonaNow, ESA_LABEL, money, monthWords, dateWords, siteName } from "../lib/util";
+import { arizonaNow, ESA_LABEL, money, monthWords, dateWords, siteName, stripeDashboard } from "../lib/util";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
 import { href } from "../router";
 
@@ -90,7 +90,7 @@ export function Money() {
       <Band>
         <h1>Money</h1>
         <p className="lede">ESA invoices live here. Autopay, refunds and card changes run in Stripe; the books run in SuperBooks.</p>
-        <div className="row"><button className="btn" onClick={() => setCreating(true)}>Create a month's ESA invoices</button><a className="btn quiet" href="https://dashboard.stripe.com/" target="_blank" rel="noreferrer">Open Stripe</a></div>
+        <div className="row"><button className="btn" onClick={() => setCreating(true)}>Create a month's ESA invoices</button><a className="btn quiet" href={stripeDashboard()} target="_blank" rel="noreferrer">Open Stripe</a></div>
       </Band>
       <div className="page">
         <ErrorBox error={error} />
@@ -105,7 +105,7 @@ export function Money() {
         {result && (
           <div className="section pane">
             <h3>{result.class_month}: {result.created.length} created</h3>
-            {result.created.map((c, i) => <div key={i} className="line"><span>{c.student}, {c.family}</span><span className="v">{money(c.amount)} <a className="hint" href={c.url} target="_blank" rel="noreferrer">open</a></span></div>)}
+            {result.created.map((c, i) => <div key={i} className="line"><span>{c.student}, {c.family}{c.classes > 1 || c.uniforms ? <span className="hint" style={{ display: "block" }}>{[c.classes > 1 ? `${c.classes} classes` : "", c.uniforms ? `${c.uniforms} ${c.uniforms === 1 ? "uniform" : "uniforms"} from the store` : ""].filter(Boolean).join(" and ")}</span> : null}</span><span className="v">{money(c.amount)} <a className="hint" href={c.url} target="_blank" rel="noreferrer">open</a></span></div>)}
             {result.skipped.map((s, i) => <div key={"s" + i} className="line"><span>{s.student}</span><span className="v"><span className="hint">skipped: {s.why}</span></span></div>)}
           </div>
         )}
@@ -165,7 +165,7 @@ export function Money() {
 
       <Dialog open={creating} onClose={() => setCreating(false)}>
         <h2>Create ESA invoices</h2>
-        <p className="hint">One invoice per ESA child for the class month you pick. Children who already have one are skipped. Nothing is emailed; families see their invoice in the Family Hub.</p>
+        <p className="hint">One invoice per ESA child for the class month you pick, with every ESA class they're in and any uniforms bought on ESA at the store. Children who already have one are skipped. Nothing is emailed; families see their invoice in the Family Hub.</p>
         <div className="field" style={{ marginTop: 12 }}><label htmlFor="month">Class month</label>
           <select id="month" value={month} onChange={(e) => setMonth(e.target.value)}>{nextMonths().map((m) => <option key={m} value={m}>{monthWords(m)}</option>)}</select>
         </div>

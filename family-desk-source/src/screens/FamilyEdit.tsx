@@ -8,7 +8,8 @@ import { Dialog, ErrorBox } from "../ui";
 
 export const PAY_OPTIONS: [PayMethod, string][] = [["private", "Card or bank"], ["esa", "Arizona ESA"], ["split", "ESA for co-op, card for classes"]];
 export const STATUS_WORDS: Record<EnrollmentStatus, string> = { active: "Enrolled", waitlist: "On the waitlist", hold: "On hold", dropped: "Dropped" };
-const SIZES = ["YXS", "YS", "YM", "YL", "YXL", "AS", "AM", "AL", "AXL", "A2XL"];
+// The same size names the Store sells by, so a child's size on file picks the right one there.
+const SIZES = ["Youth XS", "Youth S", "Youth M", "Youth L", "Youth XL", "Adult S", "Adult M", "Adult L", "Adult XL", "Adult 2XL"];
 
 function str(fd: FormData, k: string): string { return String(fd.get(k) ?? "").trim(); }
 function orNull(v: string): string | null { return v === "" ? null : v; }
@@ -151,7 +152,7 @@ export function ChildDialog({ open, onClose, family, child, sites, houses, onSav
       </div>
       <div className="two">
         <div className="field"><label htmlFor="house">House</label><input id="house" name="house" list="houses" defaultValue={child?.house ?? ""} placeholder="Not sorted yet" /><datalist id="houses">{houses.map((h) => <option key={h} value={h} />)}</datalist></div>
-        <div className="field"><label htmlFor="uniform_size">Uniform size</label><input id="uniform_size" name="uniform_size" list="sizes" defaultValue={child?.uniform_size ?? ""} placeholder="YM" /><datalist id="sizes">{SIZES.map((h) => <option key={h} value={h} />)}</datalist></div>
+        <div className="field"><label htmlFor="uniform_size">Uniform size</label><input id="uniform_size" name="uniform_size" list="sizes" defaultValue={child?.uniform_size ?? ""} placeholder="Youth M" /><datalist id="sizes">{SIZES.map((h) => <option key={h} value={h} />)}</datalist></div>
       </div>
       <label className="chk"><input type="checkbox" name="esa" defaultChecked={child?.esa ?? family.pay_method !== "private"} /> Has an Arizona ESA account</label>
       {child && <label className="chk"><input type="checkbox" defaultChecked={child.active} onChange={(e) => { (e.currentTarget.form!.elements.namedItem("active_mirror") as HTMLInputElement).value = e.currentTarget.checked ? "on" : "off"; }} /> Active (untick when the child is no longer enrolled)</label>}

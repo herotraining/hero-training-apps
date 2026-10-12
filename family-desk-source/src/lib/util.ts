@@ -62,5 +62,10 @@ export const ESA_LABEL: Record<string, string> = {
   void: "Canceled",
 };
 
+// The live Hero.Training Stripe account. Naming the account in the link opens it in live mode, rather than
+// whichever sandbox was open last.
+export const STRIPE_ACCOUNT = "acct_1UMb6lPIdzIeYVer";
+export const stripeDashboard = (page = "dashboard") => `https://dashboard.stripe.com/${STRIPE_ACCOUNT}/${page}`;
+
 export const SITE_NAMES: Record<string, string> = { peoria: "Peoria", mesa: "Mesa", prescott: "Prescott", lab: "L.A.B." };
 export const siteName = (id: string | null | undefined) => (id ? SITE_NAMES[id] ?? id : "");

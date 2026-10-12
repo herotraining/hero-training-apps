@@ -14,6 +14,7 @@ export function Shell({ staff, route, onSignOut, mock, children }: { staff: Staf
   const items: { key: Route["name"] | "family"; label: string; to: string; icon: ReactNode; show: boolean }[] = [
     { key: "today", label: "Today", to: href.today, icon: Icon.today, show: true },
     { key: "families", label: "Families", to: href.families, icon: Icon.families, show: !isCoach },
+    { key: "store", label: "Store", to: href.store, icon: Icon.store, show: canMoney },
     { key: "money", label: "Money", to: href.money, icon: Icon.money, show: canMoney },
     { key: "programs", label: "Programs", to: href.programs, icon: Icon.programs, show: staff.role === "owner" },
     { key: "staff", label: "Staff", to: href.staff, icon: Icon.staff, show: staff.role === "owner" },

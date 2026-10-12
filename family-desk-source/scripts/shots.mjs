@@ -16,7 +16,10 @@ const server = createServer(async (req, res) => {
 });
 await new Promise((r) => server.listen(4173, r));
 
-const routes = [["today", "#/today"], ["families", "#/families"], ["family", "#/families/fb"], ["family-a", "#/families/fa"], ["money", "#/money"], ["staff", "#/staff"], ["staff-pay", "#/staff", "text=Show"], ["programs", "#/programs"]];
+const routes = [["today", "#/today"], ["families", "#/families"], ["family", "#/families/fb"], ["family-a", "#/families/fa"], ["money", "#/money"], ["staff", "#/staff"], ["staff-pay", "#/staff", "text=Show"], ["programs", "#/programs"],
+  ["store", "#/store"], ["store-add", "#/store/fa", ".tile:has-text('HERO uniform T-shirt')"],
+  ["store-pay", "#/store/fa", [".tile:has-text('HERO uniform T-shirt')", "text=Add $25", "text=Take payment"]],
+  ["store-qr", "#/store", [".tile:has-text('Extra HERO T-shirt')", "dialog button:has-text('Adult M')", "text=Add $15", "text=Take payment", "text=Card: show a QR code"]]];
 const sizes = [["phone", 390, 844], ["desktop", 1280, 860]];
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 for (const [sname, w, h] of sizes) {
@@ -26,9 +29,10 @@ for (const [sname, w, h] of sizes) {
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   for (const [name, hash, click] of routes) {
+    await page.goto("about:blank"); // a fresh app each time, so a dialog left open can't carry over
     await page.goto(`http://localhost:4173/${hash}`, { waitUntil: "networkidle" });
     await page.waitForTimeout(500);
-    if (click) { await page.click(click); await page.waitForTimeout(300); }
+    for (const c of [click].flat().filter(Boolean)) { await page.click(c); await page.waitForTimeout(400); }
     await page.screenshot({ path: join(out, `${name}-${sname}.png`), fullPage: true });
   }
   if (errors.length) console.log(sname, "console errors:", errors);

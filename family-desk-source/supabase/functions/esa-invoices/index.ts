@@ -13,6 +13,37 @@ function noonArizona(y: number, m: number, d: number): number {
   return Math.floor(Date.UTC(y, m - 1, d, 19, 0, 0) / 1000);
 }
 
+type Uniform = { id: string; sale_id: string; name: string; size: string | null; quantity: number; unit_cents: number };
+
+// Required uniforms bought on ESA at the front desk ride on the child's next invoice. Claiming them (tying each line
+// to this invoice row) keeps another invoice from taking them too; if the invoice is then thrown away, the lines are
+// let go automatically and wait for the next one.
+async function claimUniforms(db: any, childId: string, invoiceId: string): Promise<Uniform[]> {
+  const { data: pending, error } = await db
+    .from("store_sale_lines")
+    .select("id, store_sales!inner(pay, status)")
+    .eq("child_id", childId)
+    .is("esa_invoice_id", null)
+    .eq("store_sales.pay", "esa")
+    .eq("store_sales.status", "on_esa");
+  if (error || !pending?.length) return [];
+  const { data: claimed, error: cerr } = await db
+    .from("store_sale_lines")
+    .update({ esa_invoice_id: invoiceId })
+    .in("id", pending.map((p: any) => p.id))
+    .is("esa_invoice_id", null)
+    .select("id, sale_id, name, size, quantity, unit_cents");
+  return cerr ? [] : (claimed ?? []);
+}
+
+// A store sale is invoiced once every one of its uniforms is on an ESA invoice.
+async function settleUniformSales(db: any, lines: Uniform[]) {
+  for (const saleId of new Set(lines.map((l) => l.sale_id))) {
+    const { count } = await db.from("store_sale_lines").select("id", { count: "exact", head: true }).eq("sale_id", saleId).is("esa_invoice_id", null);
+    if (count === 0) await db.from("store_sales").update({ status: "invoiced" }).eq("id", saleId).eq("status", "on_esa");
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
@@ -56,18 +87,33 @@ Deno.serve(async (req: Request) => {
       const { data: existing } = await db.from("esa_invoices").select("child_id").eq("class_month", classMonth).neq("status", "void");
       const done = new Set((existing ?? []).map((r: any) => r.child_id));
 
-      const created: any[] = [], skipped: any[] = [];
+      // One invoice per child per month (each child has their own ESA account), with a tuition line for every ESA
+      // class the child is in.
+      const byChild = new Map<string, { child: any; fam: any; classes: { enrollmentId: string; prog: any }[] }>();
       for (const e of enrs ?? []) {
-        const child = (e as any).children, fam = child.families, prog = (e as any).programs;
+        const child = (e as any).children;
+        const entry = byChild.get(child.id) ?? { child, fam: child.families, classes: [] };
+        entry.classes.push({ enrollmentId: (e as any).id, prog: (e as any).programs });
+        byChild.set(child.id, entry);
+      }
+
+      const created: any[] = [], skipped: any[] = [];
+      for (const { child, fam, classes } of byChild.values()) {
         const student = `${child.first_name} ${child.last_name.charAt(0)}`;
         if (done.has(child.id)) { skipped.push({ student, why: "already has an invoice for this month" }); continue; }
         if (!fam.stripe_customer_id) { skipped.push({ student, why: "family has no Stripe customer" }); continue; }
+        classes.sort((a, b) => String(a.prog.name).localeCompare(String(b.prog.name)));
+        const prog = classes[0].prog;
+        const tuitionCents = classes.reduce((n, c) => n + c.prog.monthly_price_cents, 0);
 
         // Claim the slot first (unique on child + month), so two people can't both create it in Stripe.
         const { data: draft, error: derr } = await db.from("esa_invoices").insert({
-          child_id: child.id, enrollment_id: e.id, class_month: classMonth, amount_cents: prog.monthly_price_cents, status: "draft",
+          child_id: child.id, enrollment_id: classes[0].enrollmentId, class_month: classMonth, amount_cents: tuitionCents, status: "draft",
         }).select("id").single();
         if (derr) { skipped.push({ student, why: /duplicate|unique/i.test(derr.message) ? "already has an invoice for this month" : derr.message }); continue; }
+
+        const uniforms = await claimUniforms(db, child.id, draft.id);
+        const uniformCents = uniforms.reduce((n, l) => n + l.unit_cents * l.quantity, 0);
 
         let fin: any;
         try {
@@ -86,30 +132,45 @@ Deno.serve(async (req: Request) => {
           ],
           metadata: { esa: "true", family: fam.name, student, class_month: `${m[1]}-${m[2]}`, site: prog.site_id, child_id: child.id },
         });
-        await stripe(key, "POST", "/v1/invoiceitems", {
-          customer: fam.stripe_customer_id,
-          invoice: inv.id,
-          amount: prog.monthly_price_cents,
-          currency: "usd",
-          description: `${prog.name}: ${student}, ${label} tuition`,
-          period: { start: periodStart, end: periodEnd },
-          metadata: { student },
-        });
+        for (const c of classes) {
+          await stripe(key, "POST", "/v1/invoiceitems", {
+            customer: fam.stripe_customer_id,
+            invoice: inv.id,
+            amount: c.prog.monthly_price_cents,
+            currency: "usd",
+            description: `${c.prog.name}: ${student}, ${label} tuition`,
+            period: { start: periodStart, end: periodEnd },
+            metadata: { student },
+          });
+        }
+        for (const u of uniforms) {
+          await stripe(key, "POST", "/v1/invoiceitems", {
+            customer: fam.stripe_customer_id,
+            invoice: inv.id,
+            amount: u.unit_cents * u.quantity,
+            currency: "usd",
+            description: `${u.name}${u.size ? ` (${u.size})` : ""}${u.quantity > 1 ? ` × ${u.quantity}` : ""}: ${student}, required HERO uniform`,
+            metadata: { student, store_line: u.id },
+          });
+        }
         fin = await stripe(key, "POST", `/v1/invoices/${inv.id}/finalize`, { auto_advance: false });
         } catch (serr) {
+          // Throwing the slot away also lets go of any uniforms claimed for it.
           await db.from("esa_invoices").delete().eq("id", draft.id);
           skipped.push({ student, why: `Stripe refused: ${(serr as Error).message}` }); continue;
         }
 
         const { error: ierr } = await db.from("esa_invoices").update({
+          amount_cents: tuitionCents + uniformCents,
           stripe_invoice_id: fin.id,
           hosted_invoice_url: fin.hosted_invoice_url,
           status: "sent",
           sent_at: new Date().toISOString(),
         }).eq("id", draft.id);
         if (ierr) { skipped.push({ student, why: `Stripe invoice ${fin.id} made but not recorded: ${ierr.message}` }); continue; }
+        await settleUniformSales(db, uniforms);
         done.add(child.id);
-        created.push({ student, family: fam.name, amount: prog.monthly_price_cents, invoice: fin.id, url: fin.hosted_invoice_url });
+        created.push({ student, family: fam.name, amount: tuitionCents + uniformCents, classes: classes.length, uniforms: uniforms.reduce((n, u) => n + u.quantity, 0), invoice: fin.id, url: fin.hosted_invoice_url });
       }
       return json({ class_month: label, created, skipped });
     }

@@ -10,6 +10,7 @@ import { Money } from "./screens/Money";
 import { Store } from "./screens/Store";
 import { StaffScreen } from "./screens/StaffScreen";
 import { Programs } from "./screens/Programs";
+import { UniformRequest } from "./screens/UniformRequest";
 import { ErrorBox, Icon } from "./ui";
 
 function Screens({ signOut }: { signOut: () => void }) {
@@ -48,9 +49,12 @@ function Screens({ signOut }: { signOut: () => void }) {
 type GateComponent = (p: { children: (s: () => void) => React.ReactNode }) => React.ReactNode;
 
 export function App() {
+  const route = useRoute();
   // The sign-in gate loads lazily so the demo build never touches Supabase.
   const [Gate, setGate] = useState<GateComponent | null>(null);
-  useEffect(() => { if (!IS_MOCK) import("./auth/Auth").then((m) => setGate(() => m.AuthGate)); }, []);
+  useEffect(() => { if (!IS_MOCK && route.name !== "request") import("./auth/Auth").then((m) => setGate(() => m.AuthGate)); }, [route.name]);
+  // The one page parents see: a uniform request from the Family Hub, with no staff sign-in.
+  if (route.name === "request") return <UniformRequest />;
   if (IS_MOCK) return <Screens signOut={() => {}} />;
   if (!Gate) return <div className="auth"><p className="hint">Loading…</p></div>;
   return <Gate>{(signOut) => <Screens signOut={signOut} />}</Gate>;

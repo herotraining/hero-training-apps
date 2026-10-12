@@ -1,5 +1,5 @@
 // One data layer with two backs: Supabase for real use, built-in made-up data when VITE_MOCK=1.
-import type { JackrabbitLine, Attendance, CareInput, CheckoutState, Child, ChildInput, ClassWalletDeposit, Closure, ClosureInput, EnrollmentInput, EsaInvoice, Family, FamilyInput, FeedItem, GuardianInput, NewSale, Program, ProgramInput, Profile, RosterRow, Site, Staff, StoreConfig, StoreItem, StoreItemInput, StoreSale, StripePicture, TrainerPay } from "../types";
+import type { JackrabbitLine, Attendance, CareInput, ChargeResult, CheckoutState, Child, ChildInput, ClassWalletDeposit, Closure, ClosureInput, EnrollmentInput, EsaInvoice, Family, FamilyInput, FeedItem, GuardianInput, NewSale, Program, ProgramInput, Profile, RosterRow, Site, Staff, StoreConfig, StoreItem, StoreItemInput, StoreSale, StripePicture, TrainerPay, UniformAsk, UniformLookup, UniformRequest } from "../types";
 
 export interface Api {
   mock: boolean;
@@ -48,6 +48,14 @@ export interface Api {
   storeCancel(saleId: string, reason: string): Promise<CheckoutState>;
   voidSale(saleId: string, note: string): Promise<void>;
   setHandedOut(lineId: string, handed: boolean): Promise<void>;
+  /** Charge the family's card on file for a cart; the sale is recorded paid, or voided with the reason. */
+  chargeCard(s: NewSale): Promise<ChargeResult>;
+  /** Uniform requests from the Family Hub, newest last; open ones first. */
+  uniformRequests(): Promise<UniformRequest[]>;
+  closeRequests(ids: string[], status: "fulfilled" | "canceled", saleId: string | null, note: string | null): Promise<void>;
+  /** The public request page (no sign-in): what an email and a child's first name unlock, and sending the request. */
+  uniformLookup(email: string, childFirstName: string): Promise<UniformLookup>;
+  uniformSubmit(ask: UniformAsk): Promise<{ ok: boolean; child: string; pay: "esa" | "card" | "jackrabbit"; lines: number }>;
   staff(): Promise<Staff[]>;
   addStaff(s: { email: string; name: string; role: Staff["role"]; site_id: string | null }): Promise<void>;
   setStaffActive(id: string, active: boolean): Promise<void>;

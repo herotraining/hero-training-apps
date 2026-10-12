@@ -21,7 +21,11 @@ const routes = [["today", "#/today"], ["families", "#/families"], ["family", "#/
   ["store-cart", "#/store/fa", [".tile:has-text('HERO uniform T-shirt')", "dialog button:has-text('Navy')", "text=Add $25"]],
   ["store-pay", "#/store/fa", [".tile:has-text('HERO uniform T-shirt')", "dialog button:has-text('Navy')", "text=Add $25", "button:has-text('Check out'):visible", "text=Choose how to pay"]],
   ["store-qr", "#/store", [".tile:has-text('Extra HERO T-shirt')", "dialog button:has-text('Adult M')", "text=Add $15", "button:has-text('Check out'):visible", "text=Choose how to pay", "text=Card: show a QR code"]],
-  ["store-item", "#/store", "text=Add an item"]];
+  ["store-item", "#/store", "text=Add an item"],
+  ["store-fill", "#/store", "button:has-text('Fill it') >> nth=0"],
+  ["request", "#/request"],
+  ["request-pick", "#/request", [["fill", "#rq-email", "test.family.a@example.com"], ["fill", "#rq-first", "Avery"], "text=Continue", ".tile:has-text('HERO uniform tank top')"]],
+  ["request-cart", "#/request", [["fill", "#rq-email", "test.family.a@example.com"], ["fill", "#rq-first", "Avery"], "text=Continue", ".tile:has-text('HERO uniform tank top')", "button:has-text('Navy')", "button:has-text('Youth M')", "text=Add it"]]];
 const sizes = [["phone", 390, 844], ["desktop", 1280, 860]];
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 for (const [sname, w, h] of sizes) {
@@ -34,7 +38,10 @@ for (const [sname, w, h] of sizes) {
     await page.goto("about:blank"); // a fresh app each time, so a dialog left open can't carry over
     await page.goto(`http://localhost:4173/${hash}`, { waitUntil: "networkidle" });
     await page.waitForTimeout(500);
-    for (const c of [click].flat().filter(Boolean)) { await page.click(c); await page.waitForTimeout(400); }
+    for (const c of [click].flat().filter(Boolean)) {
+      if (Array.isArray(c)) await page.fill(c[1], c[2]); else await page.click(c);
+      await page.waitForTimeout(400);
+    }
     await page.screenshot({ path: join(out, `${name}-${sname}.png`), fullPage: true });
   }
   if (errors.length) console.log(sname, "console errors:", errors);

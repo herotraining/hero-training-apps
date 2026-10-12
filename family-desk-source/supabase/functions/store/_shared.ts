@@ -53,11 +53,13 @@ function encode(params: Record<string, unknown>, prefix = "", out: string[] = []
   return out;
 }
 
+// idempotencyKey: Stripe runs a POST once per key, so a retried charge can't go through twice.
 export async function stripe(
   key: string,
   method: "GET" | "POST",
   path: string,
   params: Record<string, unknown> = {},
+  idempotencyKey?: string,
 ): Promise<any> {
   const body = encode(params).join("&");
   const url = method === "GET" && body ? `https://api.stripe.com${path}?${body}` : `https://api.stripe.com${path}`;
@@ -66,6 +68,7 @@ export async function stripe(
     headers: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/x-www-form-urlencoded",
+      ...(idempotencyKey && method === "POST" ? { "Idempotency-Key": idempotencyKey } : {}),
     },
     body: method === "POST" ? body : undefined,
   });

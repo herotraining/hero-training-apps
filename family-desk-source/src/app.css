@@ -293,3 +293,9 @@ p.notice.small{border-radius:10px;padding:8px 12px;font-size:.9rem;margin-top:8p
   .pricelist .item{grid-template-columns:48px minmax(0,1fr)}
   .pricelist .p{grid-column:2}
 }
+
+/* the parent-facing uniform request page */
+.auth.request .card{max-width:560px}
+.auth.request .shop{grid-template-columns:1fr 1fr}
+.auth.request .tile .ph{aspect-ratio:3/2}
+.auth.request h3{font-size:1.25rem}

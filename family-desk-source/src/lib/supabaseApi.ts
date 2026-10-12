@@ -1,6 +1,6 @@
 import type { Api } from "./api";
 import { supabase, functionsUrl } from "./supabase";
-import { AGREEMENT_KINDS, type Family, type Program, type RosterRow, type StoreSale } from "../types";
+import { AGREEMENT_KINDS, type Family, type Program, type RosterRow, type StoreSale, type UniformRequest } from "../types";
 
 async function callFunction<T>(name: string, body: unknown): Promise<T> {
   const sb = supabase();
@@ -17,6 +17,18 @@ async function callFunction<T>(name: string, body: unknown): Promise<T> {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json?.error ?? json?.note ?? `Request failed (${res.status})`);
+  return json as T;
+}
+
+// A function that needs no sign-in (the parent-facing request page).
+async function callPublicFunction<T>(name: string, body: unknown): Promise<T> {
+  const res = await fetch(functionsUrl(name), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string, Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string}` },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error ?? `Request failed (${res.status})`);
   return json as T;
 }
 
@@ -217,6 +229,20 @@ export function supabaseApi(): Api {
     storeCancel: (saleId, reason) => callFunction("store", { action: "cancel", sale_id: saleId, reason }),
     async voidSale(saleId, note) { const { error } = await sb.from("store_sales").update({ status: "void", note }).eq("id", saleId); fail(error); },
     async setHandedOut(lineId, handed) { const { error } = await sb.from("store_sale_lines").update({ handed_out_at: handed ? new Date().toISOString() : null }).eq("id", lineId); fail(error); },
+    chargeCard: (s) => callFunction("store", { action: "charge", cart: { site_id: s.site_id, family_id: s.family_id, note: s.note, lines: s.lines } }),
+    async uniformRequests() {
+      const { data, error } = await sb.from("uniform_requests")
+        .select("*, child:children(first_name, last_name, esa, uniform_size), family:families(name, site_id, stripe_customer_id)")
+        .order("status").order("created_at").limit(300);
+      fail(error);
+      return (data ?? []) as unknown as UniformRequest[];
+    },
+    async closeRequests(ids, status, saleId, note) {
+      const { error } = await sb.from("uniform_requests").update({ status, sale_id: saleId, closed_note: note }).in("id", ids).eq("status", "new");
+      fail(error);
+    },
+    uniformLookup: (email, childFirstName) => callPublicFunction("uniform-request", { action: "lookup", email, child_first_name: childFirstName }),
+    uniformSubmit: (ask) => callPublicFunction("uniform-request", { action: "submit", ...ask }),
     async staff() { const { data, error } = await sb.from("staff").select("*").order("name"); fail(error); return data ?? []; },
     async addStaff(s) { const { error } = await sb.from("staff").insert(s); fail(error); },
     async setStaffActive(id, active) { const { error } = await sb.from("staff").update({ active }).eq("id", id); fail(error); },

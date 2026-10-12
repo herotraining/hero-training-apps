@@ -7,7 +7,8 @@ export type Route =
   | { name: "money" }
   | { name: "store"; familyId?: string }
   | { name: "programs" }
-  | { name: "staff" };
+  | { name: "staff" }
+  | { name: "request" };
 
 export function parse(hash: string): Route {
   const h = hash.replace(/^#\/?/, "");
@@ -18,6 +19,7 @@ export function parse(hash: string): Route {
   if (a === "store") return b ? { name: "store", familyId: b } : { name: "store" };
   if (a === "staff") return { name: "staff" };
   if (a === "programs") return { name: "programs" };
+  if (a === "request") return { name: "request" };
   return { name: "today" };
 }
 
@@ -40,4 +42,5 @@ export const href = {
   storeFor: (familyId: string) => `#/store/${familyId}`,
   programs: "#/programs",
   staff: "#/staff",
+  request: "#/request",
 };

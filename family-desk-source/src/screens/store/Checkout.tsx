@@ -11,7 +11,7 @@ type Step = "review" | "choose" | "tap" | "esa" | "jackrabbit" | "cash" | "free"
 
 export function Checkout({ cart, family, sites, siteId, lockSite, config, onSite, onClose, onSold, onQr }: {
   cart: CartLine[]; family: Family | null; sites: Site[]; siteId: string; lockSite: boolean; config: StoreConfig | null;
-  onSite: (id: string) => void; onClose: () => void; onSold: (msg: string) => void; onQr: (s: CheckoutState) => void;
+  onSite: (id: string) => void; onClose: () => void; onSold: (msg: string, saleId: string) => void; onQr: (s: CheckoutState) => void;
 }) {
   const [step, setStep] = useState<Step>("review");
   const [note, setNote] = useState("");
@@ -30,7 +30,7 @@ export function Checkout({ cart, family, sites, siteId, lockSite, config, onSite
   });
   async function sell(pay: StorePay, msg: string, cardTapped = false) {
     setBusy(true); setError(null);
-    try { const a = await api(); await a.sell(sale(pay, cardTapped)); onSold(msg); }
+    try { const a = await api(); const made = await a.sell(sale(pay, cardTapped)); onSold(msg, made.id); }
     catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }

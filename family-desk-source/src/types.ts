@@ -203,12 +203,30 @@ export interface StoreSale {
   family?: { name: string } | null;
   seller?: { name: string } | null;
 }
-export interface CartLine { key: string; item_id: string; name: string; size: string | null; color: string | null; quantity: number; unit_cents: number; child_id: string | null; child_name: string | null; esa_ok: boolean; image_url: string | null }
+// request_id: the uniform request this line fills, marked filled once the sale goes through.
+export interface CartLine { key: string; item_id: string; name: string; size: string | null; color: string | null; quantity: number; unit_cents: number; child_id: string | null; child_name: string | null; esa_ok: boolean; image_url: string | null; request_id?: string }
 // unit_cents is the price the cart showed; the database refuses the sale if the price list has changed since.
 export type NewSale = { site_id: string; family_id: string | null; pay: StorePay; card_tapped?: boolean; note: string | null; lines: { item_id: string; size: string | null; color: string | null; quantity: number; child_id: string | null; unit_cents: number }[] };
 // What the store function says about a card sale's Stripe payment page.
 export interface CheckoutState { sale_id: string; status: string; url?: string | null; live?: boolean | null; expires_at?: number; note?: string }
 export interface StoreConfig { card: "off" | "practice" | "live"; why?: string }
+// A card-on-file charge for a cart (filling a uniform request).
+export interface ChargeResult { sale_id: string; status: string; amount: number; live: boolean; last4: string | null; brand: string | null }
+
+// A uniform a parent asked for from the Family Hub, waiting for staff to fill and bill it.
+export type RequestStatus = "new" | "fulfilled" | "canceled";
+export interface UniformRequest {
+  id: string; family_id: string; child_id: string; item_id: string | null; item_name: string; size: string | null; color: string | null;
+  quantity: number; note: string | null; requested_by_email: string | null; status: RequestStatus; sale_id: string | null; closed_note: string | null; created_at: string;
+  child?: { first_name: string; last_name: string; esa: boolean; uniform_size: string | null } | null;
+  family?: { name: string; site_id: string; stripe_customer_id: string | null } | null;
+}
+// What the public request page learns from an email and a child's first name.
+export interface UniformLookup {
+  children: { id: string; first_name: string; last_name: string; uniform_size: string | null; family_id: string; family_name: string; pay: "esa" | "card" | "jackrabbit"; esa_ok: boolean }[];
+  items: { id: string; name: string; price_cents: number; sizes: string[]; colors: string[]; esa_ok: boolean; image_url: string | null; description: string | null }[];
+}
+export type UniformAsk = { email: string; child_first_name: string; child_id: string; note: string | null; lines: { item_id: string; size: string | null; color: string | null; quantity: number }[] };
 
 export interface StripePicture {
   family: string;

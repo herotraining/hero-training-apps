@@ -2,7 +2,7 @@
 // and (for owners) the price list. Cards are paid on Stripe's own pages, never here.
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
-import type { CartLine, CheckoutState, Family, Site, Staff, StoreConfig, StoreItem, StoreKind, StoreSale } from "../types";
+import type { CartLine, CheckoutState, Family, Site, Staff, StoreConfig, StoreItem, StoreKind, StoreSale, UniformRequest } from "../types";
 import { arizonaToday, money, siteName, stripeDashboard } from "../lib/util";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
 import { href } from "../router";
@@ -11,6 +11,7 @@ import { Cart } from "./store/Cart";
 import { Checkout } from "./store/Checkout";
 import { ItemDialog } from "./store/ItemDialog";
 import { QrDialog } from "./store/QrDialog";
+import { Requests } from "./store/Requests";
 import { VoidDialog } from "./store/VoidDialog";
 import { KIND_WORDS, Photo, arizonaDay, canVoid, colorHex, lineWords, saleTag, sinceDays, whenWords } from "./store/shared";
 
@@ -24,6 +25,7 @@ export function Store({ staff, familyId }: { staff: Staff; familyId?: string }) 
   const [fams, setFams] = useState<Family[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [sales, setSales] = useState<StoreSale[] | null>(null);
+  const [requests, setRequests] = useState<UniformRequest[]>([]);
   const [config, setConfig] = useState<StoreConfig | null>(null);
   const [famId, setFamId] = useState<string | null>(familyId ?? null);
   const [pickingFamily, setPickingFamily] = useState(false);
@@ -44,11 +46,12 @@ export function Store({ staff, familyId }: { staff: Staff; familyId?: string }) 
 
   const loadSales = async () => { const a = await api(); setSales(await a.storeSales(sinceDays(45))); };
   const loadItems = async () => { const a = await api(); setItems(await a.storeItems()); };
+  const loadRequests = async () => { const a = await api(); setRequests(await a.uniformRequests()); };
 
   useEffect(() => {
     api().then(async (a) => {
-      const [it, f, s, sl] = await Promise.all([a.storeItems(), a.families(), a.sites(), a.storeSales(sinceDays(45))]);
-      setItems(it); setFams(f); setSites(s); setSales(sl);
+      const [it, f, s, sl, rq] = await Promise.all([a.storeItems(), a.families(), a.sites(), a.storeSales(sinceDays(45)), a.uniformRequests().catch(() => [] as UniformRequest[])]);
+      setItems(it); setFams(f); setSites(s); setSales(sl); setRequests(rq);
       // Card sales left waiting (a QR code closed before the parent paid): ask Stripe once whether they went through.
       if (sl.some((x) => x.pay === "card" && x.status === "waiting" && x.stripe_checkout_id)) {
         a.storeStatus().then((r) => { if (r.sales.some((x) => x.status === "paid")) loadSales().catch(() => {}); }).catch(() => {});
@@ -109,9 +112,11 @@ export function Store({ staff, familyId }: { staff: Staff; familyId?: string }) 
   const setQty = (key: string, qty: number) => setCart((c) => c.map((x) => (x.key === key ? { ...x, quantity: Math.max(1, Math.min(50, qty)) } : x)));
   const removeLine = (key: string) => setCart((c) => { const next = c.filter((x) => x.key !== key); if (!next.length) { setCartOpen(false); setPaying(false); } return next; });
 
-  async function finished(msg: string) {
+  async function finished(msg: string, saleId?: string, fromCart: CartLine[] = []) {
     show(msg);
-    await loadSales().catch((e) => setError(e.message));
+    const reqIds = fromCart.map((l) => l.request_id).filter((x): x is string => !!x);
+    if (saleId && reqIds.length) { try { const a = await api(); await a.closeRequests(reqIds, "fulfilled", saleId, null); } catch (e) { setError(`The sale went through, but the uniform request was not marked filled: ${(e as Error).message}`); } }
+    await Promise.all([loadSales(), loadRequests()]).catch((e) => setError(e.message));
     if (family) api().then((a) => a.families()).then(setFams).catch(() => {}); // a first uniform records the child's size
   }
   async function handedOut(lineId: string, handed: boolean) {
@@ -188,6 +193,10 @@ export function Store({ staff, familyId }: { staff: Staff; familyId?: string }) 
                 ))}
               </div>
             </div>
+
+            <Requests requests={requests} families={fams} items={items ?? []} siteId={siteId}
+              onDone={(msg) => finished(msg)} onError={() => {}}
+              onAddToCart={(lines, familyId) => { setFamId(familyId); setCart((c) => [...c.filter((x) => !lines.some((l) => l.key === x.key)), ...lines]); show("In the cart. Check out when ready."); }} />
 
             {toHandOut.length > 0 && (
               <div className="section">
@@ -314,7 +323,7 @@ export function Store({ staff, familyId }: { staff: Staff; familyId?: string }) 
           cart={cart} family={family} sites={sites} siteId={siteId} lockSite={!!staff.site_id} config={config}
           onSite={(id) => { setSiteId(id); saveSite(id); }}
           onClose={() => setPaying(false)}
-          onSold={(msg) => { setPaying(false); setCart([]); finished(msg); }}
+          onSold={(msg, saleId) => { const snapshot = cart; setPaying(false); setCart([]); finished(msg, saleId, snapshot); }}
           onQr={(state) => { const snapshot = cart; setPaying(false); setCart([]); setQr({ state, total: cartTotal, cart: snapshot }); loadSales().catch(() => {}); }}
         />
       )}
@@ -322,7 +331,7 @@ export function Store({ staff, familyId }: { staff: Staff; familyId?: string }) 
         <QrDialog
           key={qr.state.sale_id} start={qr.state} total={qr.total}
           onClose={() => { setQr(null); loadSales().catch(() => {}); }}
-          onPaid={() => finished(`Paid: ${money(qr.total)} by card.`)}
+          onPaid={() => finished(`Paid: ${money(qr.total)} by card.`, qr.state.sale_id, qr.cart)}
           onCanceled={() => { const back = qr.cart; setQr(null); if (back.length) setCart(back); finished(back.length ? "Canceled. The items are back in the cart." : "Canceled."); }}
         />
       )}

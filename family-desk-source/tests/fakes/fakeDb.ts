@@ -7,7 +7,7 @@
 // Row-level security is not modelled.
 
 type Row = Record<string, any>;
-type Filter = { op: "eq" | "neq" | "is" | "in" | "not_is" | "gte"; col: string; val: any };
+type Filter = { op: "eq" | "neq" | "is" | "in" | "not_is" | "gte" | "ilike"; col: string; val: any };
 type Result = { data: any; error: { message: string } | null; count?: number | null };
 
 export type Profile = { staff: { id?: string; role: string } | null; aal: string };
@@ -17,8 +17,8 @@ export const newId = (prefix = "row") => `${prefix}-${++seq}`;
 
 export class FakeDb {
   tables: Record<string, Row[]> = {
-    sites: [], families: [], children: [], programs: [], enrollments: [],
-    esa_invoices: [], store_items: [], store_sales: [], store_sale_lines: [], classwallet_deposits: [],
+    sites: [], families: [], guardians: [], children: [], programs: [], enrollments: [],
+    esa_invoices: [], store_items: [], store_sales: [], store_sale_lines: [], classwallet_deposits: [], uniform_requests: [],
   };
   profile: Profile = { staff: { id: "staff-owner", role: "owner" }, aal: "aal2" };
   calls: { table: string; op: string; filters: Filter[]; payload?: any; trusted: boolean }[] = [];
@@ -129,6 +129,8 @@ export class FakeDb {
     }
     if (table === "store_sale_lines") return { store_sales: this.find("store_sales", row.sale_id) ?? null };
     if (table === "store_sales") return { lines: this.tables.store_sale_lines.filter((l) => l.sale_id === row.id).map((l) => ({ ...l })) };
+    if (table === "guardians") return { families: this.find("families", row.family_id) ?? null };
+    if (table === "children") return { enrollments: this.tables.enrollments.filter((e) => e.child_id === row.id).map((e) => ({ ...e })) };
     return {};
   }
 }
@@ -157,6 +159,8 @@ class Query implements PromiseLike<Result> {
   is(col: string, val: any) { this.filters.push({ op: "is", col, val }); return this; }
   in(col: string, val: any[]) { this.filters.push({ op: "in", col, val }); return this; }
   gte(col: string, val: any) { this.filters.push({ op: "gte", col, val }); return this; }
+  // Without wildcards, PostgREST's ilike is a case-insensitive equality; that is all the functions use.
+  ilike(col: string, val: string) { this.filters.push({ op: "ilike", col, val }); return this; }
   not(col: string, op: string, val: any) {
     if (op !== "is") throw new Error(`fake db: .not() only models "is", got ${op}`);
     this.filters.push({ op: "not_is", col, val }); return this;
@@ -184,6 +188,7 @@ class Query implements PromiseLike<Result> {
       if (f.op === "is") return (v ?? null) === f.val;
       if (f.op === "not_is") return (v ?? null) !== f.val;
       if (f.op === "gte") return v >= f.val;
+      if (f.op === "ilike") return String(v ?? "").toLowerCase() === String(f.val).toLowerCase();
       return f.val.includes(v);
     });
   }
@@ -212,13 +217,17 @@ class Query implements PromiseLike<Result> {
     }
 
     if (this.op === "insert") {
-      const row = { id: newId(table), ...this.payload };
-      // Mirrors esa_invoices_live_child_month (migration 0016): one live invoice per child per month; void ones don't count.
-      if (table === "esa_invoices" && row.status !== "void" && rows.some((r) => r.child_id === row.child_id && r.class_month === row.class_month && r.status !== "void")) {
-        return { data: null, error: { message: 'duplicate key value violates unique constraint "esa_invoices_live_child_month"' } };
+      const made: Row[] = [];
+      for (const p of Array.isArray(this.payload) ? this.payload : [this.payload]) {
+        const row = { id: newId(table), ...p };
+        // Mirrors esa_invoices_live_child_month (migration 0016): one live invoice per child per month; void ones don't count.
+        if (table === "esa_invoices" && row.status !== "void" && rows.some((r) => r.child_id === row.child_id && r.class_month === row.class_month && r.status !== "void")) {
+          return { data: null, error: { message: 'duplicate key value violates unique constraint "esa_invoices_live_child_month"' } };
+        }
+        if (table === "uniform_requests") Object.assign(row, { status: row.status ?? "new", sale_id: row.sale_id ?? null, created_at: row.created_at ?? new Date().toISOString() });
+        rows.push(row); made.push(row);
       }
-      rows.push(row);
-      return this.shape([row]);
+      return this.shape(made);
     }
 
     if (this.op === "update") {

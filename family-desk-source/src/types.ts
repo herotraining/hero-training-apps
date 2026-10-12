@@ -168,8 +168,8 @@ export interface TrainerPay {
 
 // Store: uniforms and gear sold at the front desk. Card payments happen on Stripe's pages, never here.
 export type StoreKind = "uniform" | "gear" | "other";
-export interface StoreItem { id: string; name: string; kind: StoreKind; price_cents: number; sizes: string[]; esa_ok: boolean; active: boolean; sort: number }
-export type StoreItemInput = { id?: string; name: string; kind: StoreKind; price_cents: number; sizes: string[]; esa_ok: boolean; active: boolean; sort: number };
+export interface StoreItem { id: string; name: string; kind: StoreKind; price_cents: number; sizes: string[]; colors: string[]; esa_ok: boolean; active: boolean; sort: number; image_url: string | null; description: string | null }
+export type StoreItemInput = { id?: string; name: string; kind: StoreKind; price_cents: number; sizes: string[]; colors: string[]; esa_ok: boolean; active: boolean; sort: number; image_url: string | null; description: string | null };
 export type StorePay = "card" | "esa" | "jackrabbit" | "cash" | "free";
 export type StoreStatus = "waiting" | "done" | "on_esa" | "invoiced" | "void";
 export interface StoreLine {
@@ -179,6 +179,7 @@ export interface StoreLine {
   child_id: string | null;
   name: string;
   size: string | null;
+  color: string | null;
   quantity: number;
   unit_cents: number;
   esa_invoice_id: string | null;
@@ -202,9 +203,9 @@ export interface StoreSale {
   family?: { name: string } | null;
   seller?: { name: string } | null;
 }
-export interface CartLine { key: string; item_id: string; name: string; size: string | null; quantity: number; unit_cents: number; child_id: string | null; child_name: string | null; esa_ok: boolean }
+export interface CartLine { key: string; item_id: string; name: string; size: string | null; color: string | null; quantity: number; unit_cents: number; child_id: string | null; child_name: string | null; esa_ok: boolean; image_url: string | null }
 // unit_cents is the price the cart showed; the database refuses the sale if the price list has changed since.
-export type NewSale = { site_id: string; family_id: string | null; pay: StorePay; card_tapped?: boolean; note: string | null; lines: { item_id: string; size: string | null; quantity: number; child_id: string | null; unit_cents: number }[] };
+export type NewSale = { site_id: string; family_id: string | null; pay: StorePay; card_tapped?: boolean; note: string | null; lines: { item_id: string; size: string | null; color: string | null; quantity: number; child_id: string | null; unit_cents: number }[] };
 // What the store function says about a card sale's Stripe payment page.
 export interface CheckoutState { sale_id: string; status: string; url?: string | null; live?: boolean | null; expires_at?: number; note?: string }
 export interface StoreConfig { card: "off" | "practice" | "live"; why?: string }

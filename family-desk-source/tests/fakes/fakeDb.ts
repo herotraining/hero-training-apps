@@ -88,7 +88,7 @@ export class FakeDb {
       if (!it) return err("An item in the cart is no longer for sale. Remove it and add it again.");
       const q = l.quantity ?? 1;
       total += it.price_cents * q;
-      built.push({ item_id: it.id, child_id: l.child_id ?? null, name: it.name, size: l.size ?? null, quantity: q, unit_cents: it.price_cents });
+      built.push({ item_id: it.id, child_id: l.child_id ?? null, name: it.name, size: l.size ?? null, color: l.color ?? null, quantity: q, unit_cents: it.price_cents });
     }
     if (a.p_pay === "card" && !a.p_card_tapped && total < 50) return err("Stripe can't take a card payment under $0.50.");
     const status = a.p_pay === "card" ? (a.p_card_tapped ? "done" : "waiting") : a.p_pay === "esa" ? "on_esa" : "done";

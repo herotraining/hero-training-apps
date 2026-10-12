@@ -18,8 +18,10 @@ await new Promise((r) => server.listen(4173, r));
 
 const routes = [["today", "#/today"], ["families", "#/families"], ["family", "#/families/fb"], ["family-a", "#/families/fa"], ["money", "#/money"], ["staff", "#/staff"], ["staff-pay", "#/staff", "text=Show"], ["programs", "#/programs"],
   ["store", "#/store"], ["store-add", "#/store/fa", ".tile:has-text('HERO uniform T-shirt')"],
-  ["store-pay", "#/store/fa", [".tile:has-text('HERO uniform T-shirt')", "text=Add $25", "text=Take payment"]],
-  ["store-qr", "#/store", [".tile:has-text('Extra HERO T-shirt')", "dialog button:has-text('Adult M')", "text=Add $15", "text=Take payment", "text=Card: show a QR code"]]];
+  ["store-cart", "#/store/fa", [".tile:has-text('HERO uniform T-shirt')", "dialog button:has-text('Navy')", "text=Add $25"]],
+  ["store-pay", "#/store/fa", [".tile:has-text('HERO uniform T-shirt')", "dialog button:has-text('Navy')", "text=Add $25", "button:has-text('Check out'):visible", "text=Choose how to pay"]],
+  ["store-qr", "#/store", [".tile:has-text('Extra HERO T-shirt')", "dialog button:has-text('Adult M')", "text=Add $15", "button:has-text('Check out'):visible", "text=Choose how to pay", "text=Card: show a QR code"]],
+  ["store-item", "#/store", "text=Add an item"]];
 const sizes = [["phone", 390, 844], ["desktop", 1280, 860]];
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 for (const [sname, w, h] of sizes) {

@@ -109,16 +109,17 @@ const pay: TrainerPay[] = [
 ];
 
 const SIZES = ["Youth XS", "Youth S", "Youth M", "Youth L", "Youth XL", "Adult S", "Adult M", "Adult L", "Adult XL", "Adult 2XL"];
+const COLORS = ["Navy", "Red", "Black"];
 let storeItems: StoreItem[] = [
-  { id: "si1", name: "HERO uniform tank top", kind: "uniform", price_cents: 2500, sizes: SIZES, esa_ok: true, active: true, sort: 10 },
-  { id: "si2", name: "HERO uniform T-shirt", kind: "uniform", price_cents: 2500, sizes: SIZES, esa_ok: true, active: true, sort: 20 },
-  { id: "si3", name: "HERO uniform hoodie", kind: "uniform", price_cents: 2500, sizes: SIZES, esa_ok: true, active: true, sort: 30 },
-  { id: "si4", name: "Extra HERO T-shirt", kind: "gear", price_cents: 1500, sizes: SIZES, esa_ok: false, active: true, sort: 40 },
+  { id: "si1", name: "HERO uniform tank top", kind: "uniform", price_cents: 2500, sizes: SIZES, colors: COLORS, esa_ok: true, active: true, sort: 10, image_url: null, description: "The everyday training tank. Required for class." },
+  { id: "si2", name: "HERO uniform T-shirt", kind: "uniform", price_cents: 2500, sizes: SIZES, colors: COLORS, esa_ok: true, active: true, sort: 20, image_url: null, description: "Short-sleeve training shirt. Required for class." },
+  { id: "si3", name: "HERO uniform hoodie", kind: "uniform", price_cents: 2500, sizes: SIZES, colors: ["Navy"], esa_ok: true, active: true, sort: 30, image_url: null, description: "For cold mornings and the walk in." },
+  { id: "si4", name: "Extra HERO T-shirt", kind: "gear", price_cents: 1500, sizes: SIZES, colors: [], esa_ok: false, active: true, sort: 40, image_url: null, description: "A spare, for parents too." },
 ];
 const ago = (min: number) => new Date(Date.now() - min * 60000).toISOString();
 const kidName = (id: string) => { const c = families.flatMap((f) => f.children ?? []).find((k) => k.id === id); return c ? { first_name: c.first_name, last_name: c.last_name } : null; };
-const line = (sale: string, n: number, item: StoreItem, size: string | null, child: string | null, handed: string | null, qty = 1, unit = item.price_cents) =>
-  ({ id: `${sale}-l${n}`, sale_id: sale, item_id: item.id, child_id: child, name: item.name, size, quantity: qty, unit_cents: unit, esa_invoice_id: null, handed_out_at: handed, child: child ? kidName(child) : null });
+const line = (sale: string, n: number, item: StoreItem, size: string | null, child: string | null, handed: string | null, qty = 1, unit = item.price_cents, color: string | null = item.colors[0] ?? null) =>
+  ({ id: `${sale}-l${n}`, sale_id: sale, item_id: item.id, child_id: child, name: item.name, size, color, quantity: qty, unit_cents: unit, esa_invoice_id: null, handed_out_at: handed, child: child ? kidName(child) : null });
 let storeSales: StoreSale[] = [
   { id: "ms1", family_id: "fa", site_id: "peoria", pay: "esa", status: "on_esa", total_cents: 2500, stripe_checkout_id: null, stripe_url: null, stripe_live: null, note: null, paid_at: null, created_at: ago(40), lines: [line("ms1", 1, storeItems[1], "Youth M", "ca1", null)], family: { name: "Test Family A" }, seller: { name: "Mike" } },
   { id: "ms2", family_id: null, site_id: "peoria", pay: "card", status: "done", total_cents: 1500, stripe_checkout_id: null, stripe_url: null, stripe_live: null, note: null, paid_at: ago(130), created_at: ago(130), lines: [line("ms2", 1, storeItems[3], "Adult L", null, ago(129))], family: null, seller: { name: "Lisa" } },
@@ -133,7 +134,7 @@ function mockSale(s: NewSale, status: StoreSale["status"]): StoreSale {
   if (s.pay === "jackrabbit" && f?.stripe_customer_id) throw new Error("This family is billed in Family Desk now, not Jackrabbit.");
   if (s.pay === "free" && !s.note?.trim()) throw new Error("Say why there is no charge.");
   const id = "ms" + Date.now();
-  const lines = s.lines.map((l, i) => { const it = storeItems.find((x) => x.id === l.item_id)!; return line(id, i, it, l.size, l.child_id, null, l.quantity, s.pay === "free" ? 0 : it.price_cents); });
+  const lines = s.lines.map((l, i) => { const it = storeItems.find((x) => x.id === l.item_id)!; return line(id, i, it, l.size, l.child_id, null, l.quantity, s.pay === "free" ? 0 : it.price_cents, l.color); });
   const sale: StoreSale = { id, family_id: f?.id ?? null, site_id: s.site_id, pay: s.pay, status, total_cents: lines.reduce((n, l) => n + l.unit_cents * l.quantity, 0), stripe_checkout_id: null, stripe_url: null, stripe_live: null, note: s.note, paid_at: status === "done" && s.pay !== "jackrabbit" ? new Date().toISOString() : null, created_at: new Date().toISOString(), lines, family: f ? { name: f.name } : null, seller: { name: "Mike" } };
   storeSales = [sale, ...storeSales];
   return sale;
@@ -244,6 +245,7 @@ export function mockApi(): Api {
     async trainerPay(sinceIso) { await sleep(60); return pay.filter((p) => p.paid_on >= sinceIso); },
     async storeConfig() { return { card: "practice" }; },
     async storeItems() { await sleep(60); return storeItems.slice().sort((a, b) => a.sort - b.sort); },
+    async uploadStoreImage(file) { return URL.createObjectURL(file); },
     async saveStoreItem(i) { if (i.id) storeItems = storeItems.map((x) => (x.id === i.id ? { ...x, ...i, id: i.id! } : x)); else storeItems = [...storeItems, { ...i, id: "si" + Date.now() }]; },
     async storeSales(sinceIso) { await sleep(60); return storeSales.filter((s) => s.created_at >= sinceIso); },
     async sell(s) { await sleep(150); return mockSale(s, s.pay === "card" ? "done" : s.pay === "esa" ? "on_esa" : "done"); },

@@ -37,6 +37,8 @@ export interface Api {
   storeConfig(): Promise<StoreConfig>;
   storeItems(): Promise<StoreItem[]>;
   saveStoreItem(i: StoreItemInput): Promise<void>;
+  /** Owners only: put an item photo in storage and get back its public address. */
+  uploadStoreImage(file: File): Promise<string>;
   storeSales(sinceIso: string): Promise<StoreSale[]>;
   /** Ring up a sale paid any way but the QR code (Tap to Pay done, ESA, Jackrabbit, cash, no charge). */
   sell(s: NewSale): Promise<StoreSale>;

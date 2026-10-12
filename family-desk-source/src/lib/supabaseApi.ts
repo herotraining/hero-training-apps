@@ -184,16 +184,23 @@ export function supabaseApi(): Api {
       return data ?? [];
     },
     storeConfig: () => callFunction("store", { action: "config" }),
-    async storeItems() { const { data, error } = await sb.from("store_items").select("id, name, kind, price_cents, sizes, esa_ok, active, sort").order("sort").order("name"); fail(error); return data ?? []; },
+    async storeItems() { const { data, error } = await sb.from("store_items").select("id, name, kind, price_cents, sizes, colors, esa_ok, active, sort, image_url, description").order("sort").order("name"); fail(error); return data ?? []; },
     async saveStoreItem(i) {
       const { id, ...rest } = i;
       const { error } = id ? await sb.from("store_items").update(rest).eq("id", id) : await sb.from("store_items").insert(rest);
       fail(error);
     },
+    async uploadStoreImage(file) {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error } = await sb.storage.from("store-images").upload(path, file, { contentType: file.type || undefined, upsert: false });
+      fail(error);
+      return sb.storage.from("store-images").getPublicUrl(path).data.publicUrl;
+    },
     async storeSales(sinceIso) {
       const { data, error } = await sb
         .from("store_sales")
-        .select("id, family_id, site_id, pay, status, total_cents, stripe_checkout_id, stripe_url, stripe_live, note, paid_at, created_at, lines:store_sale_lines(id, sale_id, item_id, child_id, name, size, quantity, unit_cents, esa_invoice_id, handed_out_at, child:children(first_name, last_name)), family:families(name), seller:staff(name)")
+        .select("id, family_id, site_id, pay, status, total_cents, stripe_checkout_id, stripe_url, stripe_live, note, paid_at, created_at, lines:store_sale_lines(id, sale_id, item_id, child_id, name, size, color, quantity, unit_cents, esa_invoice_id, handed_out_at, child:children(first_name, last_name)), family:families(name), seller:staff(name)")
         .gte("created_at", sinceIso)
         .order("created_at", { ascending: false })
         .limit(300);

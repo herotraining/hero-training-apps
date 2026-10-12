@@ -42,7 +42,7 @@ export interface Api {
   sell(s: NewSale): Promise<StoreSale>;
   /** Card by QR code: make (or reopen) the sale's Stripe payment page. */
   storeCheckout(s: NewSale | { sale_id: string }): Promise<CheckoutState>;
-  storeStatus(saleId?: string): Promise<{ sales: { id: string; status: string; url?: string | null; live?: boolean | null }[] }>;
+  storeStatus(saleId?: string): Promise<{ sales: { id: string; status: string; url?: string | null; live?: boolean | null; error?: string }[] }>;
   storeCancel(saleId: string, reason: string): Promise<CheckoutState>;
   voidSale(saleId: string, note: string): Promise<void>;
   setHandedOut(lineId: string, handed: boolean): Promise<void>;

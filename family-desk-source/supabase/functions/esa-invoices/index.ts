@@ -116,12 +116,14 @@ Deno.serve(async (req: Request) => {
         const uniformCents = uniforms.reduce((n, l) => n + l.unit_cents * l.quantity, 0);
 
         let fin: any;
+        let inv: any = null;
         try {
-        const inv = await stripe(key, "POST", "/v1/invoices", {
+        inv = await stripe(key, "POST", "/v1/invoices", {
           customer: fam.stripe_customer_id,
           collection_method: "send_invoice",
           due_date: dueDate,
           auto_advance: false,
+          pending_invoice_items_behavior: "exclude",
           description: `Arizona ESA invoice for ${label} classes. In ClassWallet, choose Pay Vendor, select Hero Training Center, and upload this PDF. Please submit before ${MONTHS[mo - 1]} 1. Do not pay this invoice by card.`,
           footer: FOOTER,
           custom_fields: [
@@ -155,9 +157,14 @@ Deno.serve(async (req: Request) => {
         }
         fin = await stripe(key, "POST", `/v1/invoices/${inv.id}/finalize`, { auto_advance: false });
         } catch (serr) {
+          // If Stripe finalized the invoice but the reply was lost, void it so it can't be paid alongside the next one.
+          if (inv) {
+            try { const cur = await stripe(key, "GET", `/v1/invoices/${inv.id}`); if (cur.status === "open") await stripe(key, "POST", `/v1/invoices/${inv.id}/void`); }
+            catch { /* a draft left in Stripe is never sent or charged */ }
+          }
           // Throwing the slot away also lets go of any uniforms claimed for it.
-          await db.from("esa_invoices").delete().eq("id", draft.id);
-          skipped.push({ student, why: `Stripe refused: ${(serr as Error).message}` }); continue;
+          const { error: xerr } = await db.from("esa_invoices").delete().eq("id", draft.id);
+          skipped.push({ student, why: `Stripe refused: ${(serr as Error).message}${xerr ? `; the unfinished invoice row could not be cleared (${xerr.message})` : ""}` }); continue;
         }
 
         const { error: ierr } = await db.from("esa_invoices").update({

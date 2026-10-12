@@ -203,7 +203,8 @@ export interface StoreSale {
   seller?: { name: string } | null;
 }
 export interface CartLine { key: string; item_id: string; name: string; size: string | null; quantity: number; unit_cents: number; child_id: string | null; child_name: string | null; esa_ok: boolean }
-export type NewSale = { site_id: string; family_id: string | null; pay: StorePay; card_tapped?: boolean; note: string | null; lines: { item_id: string; size: string | null; quantity: number; child_id: string | null }[] };
+// unit_cents is the price the cart showed; the database refuses the sale if the price list has changed since.
+export type NewSale = { site_id: string; family_id: string | null; pay: StorePay; card_tapped?: boolean; note: string | null; lines: { item_id: string; size: string | null; quantity: number; child_id: string | null; unit_cents: number }[] };
 // What the store function says about a card sale's Stripe payment page.
 export interface CheckoutState { sale_id: string; status: string; url?: string | null; live?: boolean | null; expires_at?: number; note?: string }
 export interface StoreConfig { card: "off" | "practice" | "live"; why?: string }

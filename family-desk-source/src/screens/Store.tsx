@@ -33,7 +33,9 @@ function lineWords(l: { name: string; size: string | null; quantity: number }): 
 function saleTag(s: StoreSale): { label: string; kind?: "esa" | "warn" | "gold" | "good" } {
   if (s.status === "void") return { label: "Voided", kind: "warn" };
   if (s.status === "waiting") return { label: "Waiting for payment", kind: "gold" };
-  if (s.status === "on_esa") return { label: "On the next ESA invoice", kind: "esa" };
+  if (s.status === "on_esa") return Date.now() - new Date(s.created_at).getTime() > 40 * 86400000
+    ? { label: "Still waiting for an ESA invoice", kind: "warn" }
+    : { label: "On the next ESA invoice", kind: "esa" };
   if (s.status === "invoiced") return { label: "On an ESA invoice", kind: "esa" };
   if (s.pay === "jackrabbit") return { label: "On their Jackrabbit account" };
   if (s.pay === "free") return { label: "No charge" };
@@ -411,7 +413,7 @@ function PayDialog({ cart, family, sites, siteId, lockSite, config, onSite, onRe
 
   const sale = (pay: StorePay, cardTapped = false): NewSale => ({
     site_id: siteId, family_id: family?.id ?? null, pay, card_tapped: cardTapped, note: note.trim() || null,
-    lines: cart.map((l) => ({ item_id: l.item_id, size: l.size, quantity: l.quantity, child_id: l.child_id })),
+    lines: cart.map((l) => ({ item_id: l.item_id, size: l.size, quantity: l.quantity, child_id: l.child_id, unit_cents: l.unit_cents })),
   });
   async function sell(pay: StorePay, msg: string, cardTapped = false) {
     setBusy(true); setError(null);
@@ -548,7 +550,9 @@ function QrDialog({ start, total, onClose, onPaid, onCanceled }: { start: Checko
         const a = await api();
         const r = await a.storeStatus(st.sale_id);
         const s = r.sales.find((x) => x.id === st.sale_id);
-        if (s && s.status !== st.status) setSt((p) => ({ ...p, status: s.status, url: s.url ?? p.url }));
+        if (!s || s.status === "unknown" || s.status === st.status) return; // a missed check; the next runs in 3 seconds
+        if (s.status === "mismatch") setError(s.error ?? "Stripe's payment doesn't match this sale. Check it in Stripe.");
+        setSt((p) => ({ ...p, status: s.status, url: s.url ?? p.url }));
       } catch { /* a missed check is fine; the next one runs in 3 seconds */ }
     }, 3000);
     return () => window.clearInterval(t);
@@ -593,7 +597,7 @@ function QrDialog({ start, total, onClose, onPaid, onCanceled }: { start: Checko
         </>
       )}
       {st.status === "expired" && <p>This payment page expired before anyone paid. Make a new QR code, or cancel the sale.</p>}
-      {(st.status === "void" || st.status === "other_mode" || st.status === "unknown") && <p className="hint">{st.status === "void" ? "This sale was canceled." : "Stripe can't be checked for this sale right now. Look it up in Stripe before doing anything else."}</p>}
+      {(st.status === "void" || st.status === "other_mode" || st.status === "unknown" || st.status === "mismatch") && <p className="hint">{st.status === "void" ? "This sale was canceled." : "Stripe can't be checked for this sale right now. Look it up in Stripe before doing anything else."}</p>}
       <ErrorBox error={error} />
       {asking ? (
         <div className="row end" style={{ marginTop: 14 }}>

@@ -15,6 +15,9 @@ export class FakeKajabi {
   // Automations the admin has published. A submission to a form with no published automation is taken but does nothing.
   published = new Set(Object.keys(FORMS));
   private failures: { form: string; status: number; text: string }[] = [];
+  // Kajabi takes a burst of submissions, then answers 429 (with its "page doesn't exist" page) for a while.
+  burst = Infinity;
+  private taken = 0;
 
   failNext(form: string, status: number, text: string) { this.failures.push({ form, status, text }); }
 
@@ -37,6 +40,8 @@ export class FakeKajabi {
     const i = this.failures.findIndex((f) => f.form === form);
     if (i >= 0) { const f = this.failures.splice(i, 1)[0]; return new Response(`<html><body>${f.text}</body></html>`, { status: f.status }); }
     if (!FORMS[form]) return new Response("Not found", { status: 404 });
+    if (this.taken >= this.burst) return new Response("<html>The page you were looking for doesn't exist (404)</html>", { status: 429, headers: { "Retry-After": "30" } });
+    this.taken++;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return new Response("<html>Email is invalid</html>", { status: 422 });
     this.submissions.push({ form, email, name });
     // The site makes a contact for any new email; the automation then grants or revokes.

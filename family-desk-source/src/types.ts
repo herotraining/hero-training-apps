@@ -242,6 +242,7 @@ export interface RosterRow { child: Child; enrollment: Enrollment; family?: Fami
 
 // Kajabi hubs: who has access, and what a sync would change.
 export interface KajabiStatus { configured: boolean; counts: { family: number; staff: number; errors: number }; to_grant: number; to_revoke: number }
-export interface KajabiSyncResult { ok: boolean; granted: string[]; revoked: string[]; failed: { email: string; why: string }[]; remaining: number }
+/** throttled: Kajabi asked for a pause; the rest is still to do after retry_after seconds. */
+export interface KajabiSyncResult { ok: boolean; granted: string[]; revoked: string[]; failed: { email: string; why: string }[]; remaining: number; throttled?: { retry_after: number } | null }
 
 export interface Profile { staff: Staff | null; aal: "aal1" | "aal2" | null }

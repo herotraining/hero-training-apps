@@ -19,6 +19,7 @@ export function StaffScreen() {
   const [pay, setPay] = useState<TrainerPay[]>([]);
   const [payOpen, setPayOpen] = useState(false);
   const [kajabi, setKajabi] = useState<KajabiStatus | null | "unreachable">(null);
+  const [waiting, setWaiting] = useState(0);   // seconds Kajabi asked us to pause mid-sync
   const [syncing, setSyncing] = useState(false);
   const [toast, show] = useToast();
   const year = arizonaNow().getFullYear();
@@ -37,17 +38,26 @@ export function StaffScreen() {
   const loadKajabi = () => api().then((a) => a.kajabiStatus()).then(setKajabi).catch(() => setKajabi("unreachable"));
   useEffect(() => { load().catch((e) => setError(e.message)); loadKajabi(); }, []);
 
+  // Kajabi takes form submissions in small bursts; when it asks for a pause, wait it out and carry on (a few rounds).
   async function syncKajabi() {
     setSyncing(true); setError(null);
     try {
       const a = await api();
-      const r = await a.kajabiSync();
-      const bits = [r.granted.length ? `${r.granted.length} let in` : "", r.revoked.length ? `${r.revoked.length} closed` : "", r.failed.length ? `${r.failed.length} failed` : "", r.remaining ? `${r.remaining} more next run` : ""].filter(Boolean);
+      const total = { granted: 0, revoked: 0, failed: [] as { email: string; why: string }[], remaining: 0 };
+      for (let round = 0; round < 6; round++) {
+        const r = await a.kajabiSync();
+        total.granted += r.granted.length; total.revoked += r.revoked.length; total.failed.push(...r.failed); total.remaining = r.remaining;
+        if (!r.throttled || !r.remaining) break;
+        setWaiting(r.throttled.retry_after);
+        await new Promise((res) => setTimeout(res, r.throttled!.retry_after * 1000));
+        setWaiting(0);
+      }
+      const bits = [total.granted ? `${total.granted} let in` : "", total.revoked ? `${total.revoked} closed` : "", total.failed.length ? `${total.failed.length} failed` : "", total.remaining ? `${total.remaining} more next run` : ""].filter(Boolean);
       show(bits.length ? `Kajabi: ${bits.join(", ")}.` : "Kajabi is already in step.");
-      if (r.failed.length) setError(`Kajabi could not update: ${r.failed.map((f) => `${f.email} (${f.why})`).join("; ")}`);
+      if (total.failed.length) setError(`Kajabi could not update: ${total.failed.map((f) => `${f.email} (${f.why})`).join("; ")}`);
       await loadKajabi();
     } catch (err) { setError((err as Error).message); }
-    finally { setSyncing(false); }
+    finally { setSyncing(false); setWaiting(0); }
   }
 
   async function onAdd(e: FormEvent<HTMLFormElement>) {
@@ -143,7 +153,7 @@ export function StaffScreen() {
                 </p>
                 {!kajabi.configured && <p className="notice small">The Kajabi sync is paused (KAJABI_SYNC is off in Supabase secrets).</p>}
                 <p className="hint" style={{ marginTop: 6 }}>How it works: Family Desk fills in one of four Kajabi forms for the person (Family Hub access granted or ended, Staff Hub access granted or ended), and a Kajabi automation on each form grants or revokes the hub. The four automations must be published in Kajabi (Marketing → Automations) for anything to happen.</p>
-                <div className="row" style={{ marginTop: 10 }}><button className="btn quiet" disabled={syncing || !kajabi.configured} onClick={syncKajabi}>{syncing ? "Updating Kajabi…" : "Update Kajabi now"}</button></div>
+                <div className="row" style={{ marginTop: 10 }}><button className="btn quiet" disabled={syncing || !kajabi.configured} onClick={syncKajabi}>{waiting ? `Kajabi asked for a ${waiting}s pause…` : syncing ? "Updating Kajabi…" : "Update Kajabi now"}</button></div>
               </>
             )}
           </div>

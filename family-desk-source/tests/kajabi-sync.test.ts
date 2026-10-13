@@ -15,13 +15,14 @@ const realFetch = globalThis.fetch;
 
 beforeAll(async () => {
   (globalThis as any).Deno = { serve: (h: typeof handler) => { handler = h; }, env: { get: (k: string) => env[k] } };
+  env.KAJABI_PACE_MS = "0";   // read when the function loads; no pause between pretend submissions
   await import("../supabase/functions/kajabi-sync/index.ts");
 });
 afterAll(() => { globalThis.fetch = realFetch; delete (globalThis as any).Deno; });
 
 beforeEach(() => {
   for (const k of Object.keys(env)) delete env[k];
-  Object.assign(env, { SUPABASE_URL: "http://supabase.invalid", SUPABASE_ANON_KEY: "anon-test", SUPABASE_SERVICE_ROLE_KEY: "service-test" });
+  Object.assign(env, { SUPABASE_URL: "http://supabase.invalid", SUPABASE_ANON_KEY: "anon-test", SUPABASE_SERVICE_ROLE_KEY: "service-test", KAJABI_PACE_MS: "0" });
   db = new FakeDb();
   (globalThis as any).__fakeDb = db;
   kajabi = new FakeKajabi();
@@ -142,6 +143,19 @@ describe("sync: granting", () => {
     const again = await call({ action: "sync" });
     expect(again.body.granted).toHaveLength(1);
     expect(db.tables.kajabi_access.filter((x) => x.status === "error")).toHaveLength(0);
+  });
+
+  it("stops when Kajabi asks for a pause, marks nobody as failed, and picks up the rest next run", async () => {
+    seed();
+    kajabi.burst = 2;
+    const r = await call({ action: "sync" });
+    expect(r.body).toMatchObject({ failed: [], remaining: 2, throttled: { retry_after: 30 } });
+    expect(r.body.granted).toHaveLength(2);
+    expect(db.tables.kajabi_access.filter((x) => x.status === "error")).toHaveLength(0);
+    kajabi.burst = Infinity;
+    const again = await call({ action: "sync" });
+    expect(again.body).toMatchObject({ remaining: 0, throttled: null });
+    expect(again.body.granted).toHaveLength(2);
   });
 
   it("limits one person's sync to that email", async () => {

@@ -20,9 +20,16 @@ const FORMS: Record<string, { grant: string; revoke: string }> = {
   [STAFF_OFFER]: { grant: Deno.env.get("KAJABI_FORM_STAFF_IN") || "2149752394", revoke: Deno.env.get("KAJABI_FORM_STAFF_OUT") || "2149752395" },
 };
 const MAX_PER_RUN = 40;   // grants and revokes per call, so a big catch-up spreads over a few runs
+const PACE_MS = Number(Deno.env.get("KAJABI_PACE_MS") ?? 1200);   // between submissions: Kajabi rate-limits a burst from one place
+const RETRY_AFTER = 60;   // seconds to wait when Kajabi says "too many" and does not say how long
 
 type Want = { email: string; name: string; kind: "family" | "staff"; offer_id: string };
 type Ledger = { email: string; kind: string; offer_id: string; status: string };
+
+// Kajabi took too many submissions too quickly; nothing is wrong with the person, try again after a pause.
+class Throttled extends Error {
+  constructor(public retryAfter: number) { super(`Kajabi is taking submissions slowly right now; try again in ${retryAfter}s`); }
+}
 
 // Submit a Kajabi form for a person, as the embedded form on a page would. Kajabi answers a submission with a
 // redirect to the thank-you page (or 200), and anything else means it was not taken.
@@ -33,6 +40,11 @@ async function submitForm(formId: string, email: string, name: string): Promise<
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "text/html,application/json" },
     body,
   });
+  if (res.status === 429) {
+    await res.text().catch(() => "");
+    const after = Number(res.headers.get("Retry-After"));
+    throw new Throttled(Number.isFinite(after) && after > 0 ? Math.ceil(after) : RETRY_AFTER);
+  }
   if (res.status >= 400 || res.status < 200) {
     const text = (await res.text().catch(() => "")).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
     throw new Error(`Kajabi form ${formId} refused the submission (${res.status})${text ? `: ${text}` : ""}`);
@@ -105,30 +117,40 @@ Deno.serve(async (req: Request) => {
       const now = new Date().toISOString();
       const record = (row: Record<string, unknown>) => admin.from("kajabi_access").upsert({ ...row, synced_at: now }, { onConflict: "email,offer_id" });
 
+      let throttled: { retry_after: number } | null = null;
+      let sent = 0;
+      const pace = async () => { if (sent++ > 0) await new Promise((r) => setTimeout(r, PACE_MS)); };
       for (const w of grants) {
+        if (throttled) break;
         try {
+          await pace();
           await submitForm(FORMS[w.offer_id].grant, w.email, w.name);
           await record({ email: w.email, kind: w.kind, offer_id: w.offer_id, status: "granted", granted_at: now, revoked_at: null, last_error: null });
           done.granted.push(w.email);
         } catch (e) {
+          if (e instanceof Throttled) { throttled = { retry_after: e.retryAfter }; break; }
           const why = (e as Error).message;
           await record({ email: w.email, kind: w.kind, offer_id: w.offer_id, status: "error", last_error: why });
           done.failed.push({ email: w.email, why });
         }
       }
       for (const h of revokes) {
+        if (throttled) break;
         try {
+          await pace();
           await submitForm(FORMS[h.offer_id]?.revoke ?? "", h.email, h.email);
           await record({ email: h.email, kind: h.kind, offer_id: h.offer_id, status: "revoked", revoked_at: now, last_error: null });
           done.revoked.push(h.email);
         } catch (e) {
+          if (e instanceof Throttled) { throttled = { retry_after: e.retryAfter }; break; }
           const why = (e as Error).message;
           await record({ email: h.email, kind: h.kind, offer_id: h.offer_id, status: "error", last_error: why });
           done.failed.push({ email: h.email, why });
         }
       }
-      const remaining = p.toGrant.length + p.toRevoke.length - grants.length - revokes.length;
-      return json({ ok: true, ...done, remaining });
+      const touched = done.granted.length + done.revoked.length + done.failed.length;
+      const remaining = p.toGrant.length + p.toRevoke.length - touched;
+      return json({ ok: true, ...done, remaining, throttled });
     }
 
     return json({ error: "action must be status, plan or sync" }, 400);

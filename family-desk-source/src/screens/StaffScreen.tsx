@@ -141,7 +141,8 @@ export function StaffScreen() {
                   {kajabi.to_grant === 0 && kajabi.to_revoke === 0 ? "Everyone who should have access has it." : `${kajabi.to_grant} to let in, ${kajabi.to_revoke} to close.`}
                   {" "}Every guardian of an active family with a child in a class gets the Family Hub and the Library; every active staff member gets the Staff Hub. Family Desk updates Kajabi a moment after a family, class or staff change; this runs it now.
                 </p>
-                {!kajabi.configured && <p className="notice small">Kajabi isn't connected yet. In Kajabi go to Settings → Public API, create credentials, and add them to Supabase as KAJABI_CLIENT_ID and KAJABI_CLIENT_SECRET. Nothing is granted until then.</p>}
+                {!kajabi.configured && <p className="notice small">The Kajabi sync is paused (KAJABI_SYNC is off in Supabase secrets).</p>}
+                <p className="hint" style={{ marginTop: 6 }}>How it works: Family Desk fills in one of four Kajabi forms for the person (Family Hub access granted or ended, Staff Hub access granted or ended), and a Kajabi automation on each form grants or revokes the hub. The four automations must be published in Kajabi (Marketing → Automations) for anything to happen.</p>
                 <div className="row" style={{ marginTop: 10 }}><button className="btn quiet" disabled={syncing || !kajabi.configured} onClick={syncKajabi}>{syncing ? "Updating Kajabi…" : "Update Kajabi now"}</button></div>
               </>
             )}

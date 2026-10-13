@@ -1,67 +1,42 @@
 // Kajabi access: keep the hubs on hero.training in step with Family Desk. Every guardian of an active family with a
 // child in a class gets Family Hub Access; every active staff member gets Staff Hub Access; both are taken back
 // when that stops being true. Works out the difference between what should be and what is (the kajabi_access
-// ledger), then grants and revokes through Kajabi's public API. Owners and admins may run it; the app nudges it
-// after family and staff changes, and an owner can run it from the Staff screen.
-//
-// Needs Kajabi API credentials in Supabase secrets (Kajabi: Settings → Public API): KAJABI_CLIENT_ID and
-// KAJABI_CLIENT_SECRET. Until they are set, status says so and nothing is granted.
+// ledger), then grants and revokes by submitting four Kajabi forms the way an embedded form does: no API key, so
+// it works on Kajabi's Basic plan. A published Kajabi automation on each form does the granting or revoking:
+//   "Family Hub access granted" → grant Family Hub Access      "Family Hub access ended" → revoke it
+//   "Staff Hub access granted"  → grant Staff Hub Access       "Staff Hub access ended"  → revoke it
+// Owners and admins may run it; the app nudges it after family and staff changes, and an owner can run it from the
+// Staff screen. KAJABI_SYNC=off in Supabase secrets pauses it.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { cors, json, userClient } from "./_shared.ts";
 
-const SITE_ID = Deno.env.get("KAJABI_SITE_ID") || "2148781454";
+const SITE = Deno.env.get("KAJABI_SITE_URL") || "https://www.hero.training";
 const FAMILY_OFFER = Deno.env.get("KAJABI_FAMILY_OFFER_ID") || "2151417348";   // Family Hub Access: Family Hub + The Library
 const STAFF_OFFER = Deno.env.get("KAJABI_STAFF_OFFER_ID") || "2151415672";     // Staff Hub Access: Staff Hub
-const API = Deno.env.get("KAJABI_API") || "https://api.kajabi.com";
+// The forms, by what submitting them does.
+const FORMS: Record<string, { grant: string; revoke: string }> = {
+  [FAMILY_OFFER]: { grant: Deno.env.get("KAJABI_FORM_FAMILY_IN") || "2149752392", revoke: Deno.env.get("KAJABI_FORM_FAMILY_OUT") || "2149752393" },
+  [STAFF_OFFER]: { grant: Deno.env.get("KAJABI_FORM_STAFF_IN") || "2149752394", revoke: Deno.env.get("KAJABI_FORM_STAFF_OUT") || "2149752395" },
+};
 const MAX_PER_RUN = 40;   // grants and revokes per call, so a big catch-up spreads over a few runs
 
 type Want = { email: string; name: string; kind: "family" | "staff"; offer_id: string };
-type Ledger = { email: string; kind: string; offer_id: string; kajabi_contact_id: string | null; status: string };
+type Ledger = { email: string; kind: string; offer_id: string; status: string };
 
-// A thin Kajabi client: one token per call, JSON:API bodies.
-class Kajabi {
-  private token: string | null = null;
-  constructor(private id: string, private secret: string) {}
-  private async auth(): Promise<string> {
-    if (this.token) return this.token;
-    const res = await fetch(`${API}/v1/oauth/token`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ grant_type: "client_credentials", client_id: this.id, client_secret: this.secret }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.access_token) throw new Error(`Kajabi sign-in failed (${res.status}): ${data.error_description ?? data.error ?? "no token"}`);
-    this.token = data.access_token;
-    return this.token!;
+// Submit a Kajabi form for a person, as the embedded form on a page would. Kajabi answers a submission with a
+// redirect to the thank-you page (or 200), and anything else means it was not taken.
+async function submitForm(formId: string, email: string, name: string): Promise<void> {
+  const body = new URLSearchParams({ "form_submission[email]": email, "form_submission[name]": name });
+  const res = await fetch(`${SITE}/forms/${formId}/form_submissions`, {
+    method: "POST", redirect: "manual",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "text/html,application/json" },
+    body,
+  });
+  if (res.status >= 400 || res.status < 200) {
+    const text = (await res.text().catch(() => "")).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+    throw new Error(`Kajabi form ${formId} refused the submission (${res.status})${text ? `: ${text}` : ""}`);
   }
-  async call(method: string, path: string, body?: unknown): Promise<any> {
-    const res = await fetch(`${API}${path}`, {
-      method,
-      headers: { Authorization: `Bearer ${await this.auth()}`, Accept: "application/vnd.api+json", ...(body ? { "Content-Type": "application/vnd.api+json" } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (res.status === 204) return null;
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const msg = data?.errors?.map((e: any) => e.detail ?? e.title).join("; ") ?? data?.error ?? `Kajabi ${res.status}`;
-      throw new Error(msg);
-    }
-    return data;
-  }
-  async findContact(email: string): Promise<{ id: string } | null> {
-    const q = new URLSearchParams({ "filter[site_id]": SITE_ID, "filter[search]": email, "page[size]": "20" });
-    const data = await this.call("GET", `/v1/contacts?${q}`);
-    const hit = (data?.data ?? []).find((c: any) => String(c.attributes?.email ?? "").toLowerCase() === email);
-    return hit ? { id: String(hit.id) } : null;
-  }
-  async createContact(email: string, name: string): Promise<{ id: string }> {
-    const data = await this.call("POST", "/v1/contacts", {
-      data: { type: "contacts", attributes: { email, name }, relationships: { site: { data: { type: "sites", id: SITE_ID } } } },
-    });
-    return { id: String(data.data.id) };
-  }
-  grant(contactId: string, offerId: string) { return this.call("POST", `/v1/contacts/${contactId}/relationships/offers`, { data: [{ type: "offers", id: offerId }] }); }
-  revoke(contactId: string, offerId: string) { return this.call("DELETE", `/v1/contacts/${contactId}/relationships/offers`, { data: [{ type: "offers", id: offerId }] }); }
 }
 
 Deno.serve(async (req: Request) => {
@@ -78,8 +53,7 @@ Deno.serve(async (req: Request) => {
   if (prof?.aal !== "aal2") return json({ error: "Finish two-step sign-in first" }, 403);
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
-  const clientId = Deno.env.get("KAJABI_CLIENT_ID") ?? "", clientSecret = Deno.env.get("KAJABI_CLIENT_SECRET") ?? "";
-  const configured = !!clientId && !!clientSecret;
+  const configured = (Deno.env.get("KAJABI_SYNC") ?? "on").toLowerCase() !== "off";
 
   // Who should have what, from Family Desk.
   async function wanted(): Promise<Want[]> {
@@ -99,7 +73,7 @@ Deno.serve(async (req: Request) => {
     return [...out.values()];
   }
   async function ledger(): Promise<Ledger[]> {
-    const { data, error } = await admin.from("kajabi_access").select("email, kind, offer_id, kajabi_contact_id, status");
+    const { data, error } = await admin.from("kajabi_access").select("email, kind, offer_id, status");
     if (error) throw new Error(error.message);
     return (data ?? []) as Ledger[];
   }
@@ -122,21 +96,19 @@ Deno.serve(async (req: Request) => {
     }
 
     if (body.action === "sync") {
-      if (!configured) return json({ error: "Kajabi isn't connected yet. Add KAJABI_CLIENT_ID and KAJABI_CLIENT_SECRET to Supabase secrets (Kajabi: Settings → Public API)." }, 503);
+      if (!configured) return json({ error: "The Kajabi sync is paused (KAJABI_SYNC=off in Supabase secrets)." }, 503);
       const only = Array.isArray(body.emails) ? new Set(body.emails.map((e: unknown) => String(e).trim().toLowerCase())) : null;
       const p = await plan();
       const grants = p.toGrant.filter((w) => !only || only.has(w.email)).slice(0, MAX_PER_RUN);
       const revokes = p.toRevoke.filter((h) => !only || only.has(h.email)).slice(0, Math.max(0, MAX_PER_RUN - grants.length));
-      const kajabi = new Kajabi(clientId, clientSecret);
       const done = { granted: [] as string[], revoked: [] as string[], failed: [] as { email: string; why: string }[] };
       const now = new Date().toISOString();
       const record = (row: Record<string, unknown>) => admin.from("kajabi_access").upsert({ ...row, synced_at: now }, { onConflict: "email,offer_id" });
 
       for (const w of grants) {
         try {
-          const contact = (await kajabi.findContact(w.email)) ?? (await kajabi.createContact(w.email, w.name));
-          await kajabi.grant(contact.id, w.offer_id);
-          await record({ email: w.email, kind: w.kind, offer_id: w.offer_id, kajabi_contact_id: contact.id, status: "granted", granted_at: now, revoked_at: null, last_error: null });
+          await submitForm(FORMS[w.offer_id].grant, w.email, w.name);
+          await record({ email: w.email, kind: w.kind, offer_id: w.offer_id, status: "granted", granted_at: now, revoked_at: null, last_error: null });
           done.granted.push(w.email);
         } catch (e) {
           const why = (e as Error).message;
@@ -146,9 +118,8 @@ Deno.serve(async (req: Request) => {
       }
       for (const h of revokes) {
         try {
-          const contact = h.kajabi_contact_id ? { id: h.kajabi_contact_id } : await kajabi.findContact(h.email);
-          if (contact) await kajabi.revoke(contact.id, h.offer_id);
-          await record({ email: h.email, kind: h.kind, offer_id: h.offer_id, kajabi_contact_id: contact?.id ?? null, status: "revoked", revoked_at: now, last_error: null });
+          await submitForm(FORMS[h.offer_id]?.revoke ?? "", h.email, h.email);
+          await record({ email: h.email, kind: h.kind, offer_id: h.offer_id, status: "revoked", revoked_at: now, last_error: null });
           done.revoked.push(h.email);
         } catch (e) {
           const why = (e as Error).message;

@@ -1,11 +1,12 @@
 // Kajabi access sync (supabase/functions/kajabi-sync): who should be in the hubs, who is, and the grants and
-// revokes that close the gap. The real function runs against the in-memory database and a pretend Kajabi API.
-// Made-up families and staff only.
+// revokes that close the gap, done by submitting Kajabi forms whose automations grant or revoke the offers. The
+// real function runs against the in-memory database and a pretend hero.training. Made-up families and staff only.
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { FakeDb } from "./fakes/fakeDb";
 import { FakeKajabi } from "./fakes/fakeKajabi";
 
 const FAMILY = "2151417348", STAFF = "2151415672";
+const FORM = { familyIn: "2149752392", familyOut: "2149752393", staffIn: "2149752394", staffOut: "2149752395" };
 let handler: (req: Request) => Promise<Response>;
 let db: FakeDb;
 let kajabi: FakeKajabi;
@@ -20,7 +21,7 @@ afterAll(() => { globalThis.fetch = realFetch; delete (globalThis as any).Deno; 
 
 beforeEach(() => {
   for (const k of Object.keys(env)) delete env[k];
-  Object.assign(env, { SUPABASE_URL: "http://supabase.invalid", SUPABASE_ANON_KEY: "anon-test", SUPABASE_SERVICE_ROLE_KEY: "service-test", KAJABI_CLIENT_ID: "kj_client_test", KAJABI_CLIENT_SECRET: "kj_secret_test" });
+  Object.assign(env, { SUPABASE_URL: "http://supabase.invalid", SUPABASE_ANON_KEY: "anon-test", SUPABASE_SERVICE_ROLE_KEY: "service-test" });
   db = new FakeDb();
   (globalThis as any).__fakeDb = db;
   kajabi = new FakeKajabi();
@@ -76,19 +77,18 @@ describe("status and plan", () => {
     // Not Sal (Cal dropped), not Ollie (inactive family), not Gone (inactive staff), not Grandma (no email).
   });
 
-  it("says when Kajabi isn't connected, and refuses to sync", async () => {
+  it("can be paused from Supabase secrets", async () => {
     seed();
-    delete env.KAJABI_CLIENT_SECRET;
+    env.KAJABI_SYNC = "off";
     expect((await call({ action: "status" })).body.configured).toBe(false);
     const r = await call({ action: "sync" });
     expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/KAJABI_CLIENT_ID/);
-    expect(kajabi.calls).toHaveLength(0);
+    expect(kajabi.submissions).toHaveLength(0);
   });
 
   it("plans a revoke for someone who had access and no longer qualifies", async () => {
     seed();
-    db.insertRow("kajabi_access", { email: "ollie@example.test", kind: "family", offer_id: FAMILY, kajabi_contact_id: "777", status: "granted" });
+    db.insertRow("kajabi_access", { email: "ollie@example.test", kind: "family", offer_id: FAMILY, status: "granted" });
     const r = await call({ action: "plan" });
     expect(r.body.to_revoke).toBe(1);
     expect(r.body.revokes).toEqual([{ email: "ollie@example.test", kind: "family", offer_id: FAMILY }]);
@@ -96,56 +96,48 @@ describe("status and plan", () => {
 });
 
 describe("sync: granting", () => {
-  it("signs in once, finds or creates each contact, grants the right offer, and keeps the ledger", async () => {
+  it("submits the right form for each person with their name, and keeps the ledger", async () => {
     seed();
-    const pat = kajabi.addContact("pat.tester@example.test", "Pat T"); // already a Kajabi contact (created a Hero Account)
+    const pat = kajabi.addContact("pat.tester@example.test", "Pat T"); // already a Kajabi contact (made a Hero Account)
     const r = await call({ action: "sync" });
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ ok: true, remaining: 0, failed: [] });
     expect(r.body.granted.sort()).toEqual(["kai@example.test", "lisa@example.test", "pat.tester@example.test", "sam.tester@example.test"]);
-    expect(kajabi.tokensIssued).toBe(1);
-    // Pat was found, not duplicated; Sam was created with the guardian's name.
+    expect(kajabi.submissions.map((s) => [s.form, s.email, s.name]).sort()).toEqual([
+      [FORM.familyIn, "pat.tester@example.test", "Pat Tester"], [FORM.familyIn, "sam.tester@example.test", "Sam Tester"],
+      [FORM.staffIn, "kai@example.test", "Kai"], [FORM.staffIn, "lisa@example.test", "Lisa"],
+    ]);
+    // Pat's existing contact got the offer; Sam became a contact; staff got the Staff Hub only.
     expect(pat.offers.has(FAMILY)).toBe(true);
-    expect(kajabi.contacts.size).toBe(4);
-    const sam = kajabi.byEmail("sam.tester@example.test")!;
-    expect(sam.name).toBe("Sam Tester");
-    expect(sam.offers.has(FAMILY)).toBe(true);
+    expect(kajabi.byEmail("sam.tester@example.test")!.offers.has(FAMILY)).toBe(true);
     expect(kajabi.byEmail("lisa@example.test")!.offers.has(STAFF)).toBe(true);
     expect(kajabi.byEmail("lisa@example.test")!.offers.has(FAMILY)).toBe(false);
-    expect(granted("pat.tester@example.test", FAMILY)).toMatchObject({ kind: "family", kajabi_contact_id: pat.id });
-    expect(granted("sam.tester@example.test", FAMILY)).toMatchObject({ kajabi_contact_id: sam.id });
-    // The create call carried the site, as Kajabi's JSON:API wants.
-    const create = kajabi.calls.find((c) => c.method === "POST" && c.path === "/v1/contacts")!;
-    expect(create.body).toMatchObject({ data: { type: "contacts", attributes: { email: "sam.tester@example.test" }, relationships: { site: { data: { type: "sites", id: "2148781454" } } } } });
+    expect(granted("pat.tester@example.test", FAMILY)).toMatchObject({ kind: "family" });
   });
 
   it("is a no-op the second time", async () => {
     seed();
     await call({ action: "sync" });
-    const before = kajabi.calls.length;
     const r = await call({ action: "sync" });
     expect(r.body).toMatchObject({ granted: [], revoked: [], failed: [], remaining: 0 });
-    expect(kajabi.calls.length).toBe(before);
+    expect(kajabi.submissions).toHaveLength(4);
     expect((await call({ action: "status" })).body).toMatchObject({ counts: { family: 2, staff: 2, errors: 0 }, to_grant: 0, to_revoke: 0 });
   });
 
   it("gives a parent who is also staff both hubs", async () => {
-    const s = seed();
+    seed();
     db.insertRow("staff", { name: "Pat Tester", email: "pat.tester@example.test", active: true });
     await call({ action: "sync" });
-    const pat = kajabi.byEmail("pat.tester@example.test")!;
-    expect([...pat.offers].sort()).toEqual([STAFF, FAMILY].sort());
-    expect(s.testers.status).toBe("active");
+    expect([...kajabi.byEmail("pat.tester@example.test")!.offers].sort()).toEqual([STAFF, FAMILY].sort());
   });
 
-  it("records a Kajabi failure on that person, carries on with the others, and retries next time", async () => {
+  it("records a refused submission on that person, carries on with the others, and retries next time", async () => {
     seed();
-    kajabi.failNext("POST", /^\/v1\/contacts$/, 422, "name is too long");
+    kajabi.failNext(FORM.staffIn, 422, "Email is invalid");
     const r = await call({ action: "sync" });
     expect(r.body.failed).toHaveLength(1);
+    expect(r.body.failed[0].why).toMatch(/refused the submission \(422\): Email is invalid/);
     expect(r.body.granted).toHaveLength(3);
-    const bad = db.tables.kajabi_access.find((x) => x.status === "error")!;
-    expect(bad.last_error).toBe("name is too long");
     expect((await call({ action: "status" })).body).toMatchObject({ counts: { errors: 1 }, to_grant: 1 });
     const again = await call({ action: "sync" });
     expect(again.body.granted).toHaveLength(1);
@@ -159,13 +151,13 @@ describe("sync: granting", () => {
     expect(r.body.remaining).toBe(3);
   });
 
-  it("fails cleanly when Kajabi rejects the credentials", async () => {
+  it("still records the grant when the automation isn't published yet: the form took it, Kajabi runs it later", async () => {
     seed();
-    env.KAJABI_CLIENT_SECRET = "wrong";
+    kajabi.published.delete(FORM.familyIn);
     const r = await call({ action: "sync" });
-    expect(r.body.failed).toHaveLength(4);
-    expect(r.body.failed[0].why).toMatch(/Kajabi sign-in failed/);
-    expect(kajabi.contacts.size).toBe(0);
+    expect(r.body.failed).toEqual([]);
+    expect(kajabi.byEmail("pat.tester@example.test")!.offers.has(FAMILY)).toBe(false);
+    expect(granted("pat.tester@example.test", FAMILY)).toBeTruthy();
   });
 });
 
@@ -177,12 +169,13 @@ describe("sync: revoking", () => {
     db.tables.staff.find((p) => p.email === "kai@example.test")!.active = false;
     const r = await call({ action: "sync" });
     expect(r.body.revoked.sort()).toEqual(["kai@example.test", "pat.tester@example.test", "sam.tester@example.test"]);
+    expect(kajabi.submissions.slice(4).map((x) => [x.form, x.email]).sort()).toEqual([
+      [FORM.familyOut, "pat.tester@example.test"], [FORM.familyOut, "sam.tester@example.test"], [FORM.staffOut, "kai@example.test"],
+    ]);
     expect(kajabi.byEmail("pat.tester@example.test")!.offers.has(FAMILY)).toBe(false);
     expect(kajabi.byEmail("kai@example.test")!.offers.has(STAFF)).toBe(false);
     expect(kajabi.byEmail("lisa@example.test")!.offers.has(STAFF)).toBe(true);
     expect(db.tables.kajabi_access.find((x) => x.email === "kai@example.test")).toMatchObject({ status: "revoked" });
-    // Revoking used the contact id the ledger remembered: no search needed.
-    expect(kajabi.calls.filter((c) => c.method === "GET" && c.path.startsWith("/v1/contacts?")).length).toBe(4);
   });
 
   it("closes access when a child's only class ends, and reopens it when a new one starts", async () => {

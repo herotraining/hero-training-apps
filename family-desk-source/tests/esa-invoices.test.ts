@@ -387,13 +387,15 @@ describe("mark_paid", () => {
     expect(db.rpcCalls.some((c) => c.name === "mark_esa_paid")).toBe(false);
   });
 
-  it("says so when Stripe was marked paid but Family Desk could not record it", async () => {
+  it("names the Stripe invoice when Stripe was marked paid but Family Desk could not record it (F9)", async () => {
     const { inv, row } = openInvoice();
     db.failNext("mark_esa_paid", "rpc", "permission denied");
     const r = await call({ action: "mark_paid", esa_invoice_id: row.id, reason: "Deposit seen" });
     expect(r.status).toBe(500);
-    expect(r.body.error).toMatch(/Stripe shows paid but Family Desk did not record it/);
+    expect(r.body.error).toMatch(new RegExp(`Stripe invoice ${inv.id} shows paid but Family Desk did not record it: permission denied`));
+    expect(r.body.stripe_invoice_id).toBe(inv.id);
     expect(stripe.invoices.get(inv.id)!.status).toBe("paid");
+    expect(row.status).toBe("sent");
   });
 
   it("still marks the invoice paid, but says so, when the deposit was already confirmed against another invoice", async () => {

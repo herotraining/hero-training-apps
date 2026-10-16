@@ -1,4 +1,4 @@
-// Uniform requests from the Family Hub. No sign-in: a parent gives the email on file and their child's first name,
+// Uniform requests from the page linked on hero.training. No sign-in: a parent gives the email on file and their child's first name,
 // and only a child with an active class in that parent's family comes back. The request waits for staff in Family
 // Desk. Everything here runs with the service key, so nothing is returned that the email and name don't unlock.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";

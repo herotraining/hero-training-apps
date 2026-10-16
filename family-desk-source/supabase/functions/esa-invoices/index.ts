@@ -203,6 +203,7 @@ Deno.serve(async (req: Request) => {
         const miss = await tieDeposit();
         return json({ ok: true, invoice: row, note: miss ? `Already paid, but ${miss}` : depositId ? undefined : "Already paid" });
       }
+      // The row's own status is checked before Stripe is touched (F9), and again inside mark_esa_paid.
       if (!["sent", "submitted", "rejected"].includes(row.status)) {
         return json({ error: `Invoice is ${row.status}; only a sent, submitted, or rejected invoice can be marked paid` }, 409);
       }
@@ -212,7 +213,11 @@ Deno.serve(async (req: Request) => {
         else if (inv.status !== "paid") return json({ error: `Stripe invoice is ${inv.status}; only an open invoice can be marked paid` }, 409);
       }
       const { data: updated, error: uerr } = await db.rpc("mark_esa_paid", { p_id: id, p_reason: reason });
-      if (uerr) return json({ error: `Stripe shows paid but Family Desk did not record it: ${uerr.message}` }, 500);
+      if (uerr) {
+        // Stripe has the invoice paid and Family Desk does not: name the Stripe invoice so it can be reconciled.
+        const ref = row.stripe_invoice_id ? `Stripe invoice ${row.stripe_invoice_id}` : "Stripe";
+        return json({ error: `${ref} shows paid but Family Desk did not record it: ${uerr.message}. Check it in Stripe before trying again.`, stripe_invoice_id: row.stripe_invoice_id ?? null }, 500);
+      }
       const miss = await tieDeposit();
       if (miss) return json({ ok: true, invoice: updated, note: `Invoice marked paid, but ${miss}` });
       return json({ ok: true, invoice: updated });

@@ -108,7 +108,7 @@ export function Today({ staff }: { staff: Staff }) {
             <ul className="list">
               {uniforms.length > 0 && (
                 <li><a className="item" href={href.store}>
-                  <span className="n">{uniforms.reduce((n, r) => n + r.quantity, 0)} uniform{uniforms.reduce((n, r) => n + r.quantity, 0) === 1 ? "" : "s"} requested from the Family Hub</span>
+                  <span className="n">{uniforms.reduce((n, r) => n + r.quantity, 0)} uniform{uniforms.reduce((n, r) => n + r.quantity, 0) === 1 ? "" : "s"} requested from hero.training</span>
                   <span className="k">{[...new Set(uniforms.map((r) => r.child?.first_name).filter(Boolean))].join(", ")}. Fill and bill them on the Store screen.</span>
                   <span className="p"><Tag kind="gold">Waiting</Tag></span>
                 </a></li>

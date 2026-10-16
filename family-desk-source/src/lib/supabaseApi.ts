@@ -1,6 +1,6 @@
 import type { Api } from "./api";
 import { supabase, functionsUrl } from "./supabase";
-import { AGREEMENT_KINDS, type Family, type Program, type RosterRow, type StoreSale, type UniformRequest } from "../types";
+import { AGREEMENT_KINDS, type Family, type Program, type Role, type RosterRow, type StoreSale, type UniformRequest } from "../types";
 
 async function callFunction<T>(name: string, body: unknown): Promise<T> {
   const sb = supabase();
@@ -32,11 +32,12 @@ async function callPublicFunction<T>(name: string, body: unknown): Promise<T> {
   return json as T;
 }
 
+const CHILD_SELECT = `id, family_id, first_name, last_name, birth_date, site_id, uniform_size, esa, house, active,
+    care:care_notes(child_id, allergies, medications, emergency_contacts, authorized_pickups, notes),
+    enrollments(id, child_id, program_id, status, pay, start_date, end_date, note, program:programs(id, name, kind, site_id, weekday, start_time, end_time, monthly_price_cents))`;
 const FAMILY_SELECT = `id, name, site_id, pay_method, stripe_customer_id, address_line1, city, zip, text_consent, notes, status,
   guardians(id, family_id, name, email, mobile, is_primary),
-  children(id, family_id, first_name, last_name, birth_date, site_id, uniform_size, esa, house, active,
-    care:care_notes(child_id, allergies, medications, emergency_contacts, authorized_pickups, notes),
-    enrollments(id, child_id, program_id, status, pay, start_date, end_date, note, program:programs(id, name, kind, site_id, weekday, start_time, end_time, monthly_price_cents))),
+  children(${CHILD_SELECT}),
   agreements(id, kind, signed_at, signed_by)`;
 
 function shapeFamily(f: any): Family {
@@ -50,28 +51,52 @@ export function supabaseApi(): Api {
   const sb = supabase();
   const fail = (e: { message: string } | null) => { if (e) throw new Error(e.message); };
 
-  // After a change that can open or close hub access (a family, a child's class, a staff member), ask the
-  // kajabi-sync function to catch up, a moment later and without waiting on it. A failure here is never shown:
-  // the Staff screen's Kajabi pane says what's still pending.
-  let nudgeTimer: number | undefined;
-  const nudgeKajabi = () => { window.clearTimeout(nudgeTimer); nudgeTimer = window.setTimeout(() => { callFunction("kajabi-sync", { action: "sync" }).catch(() => {}); }, 1500); };
-  const andNudge = <T,>(p: Promise<T>): Promise<T> => p.then((v) => { nudgeKajabi(); return v; });
+  // The signed-in role, remembered from profile(), decides whether families come from the full tables or the
+  // roster views a site lead is allowed (roster_families, roster_guardians: no addresses, emails, notes or money).
+  let role: Role | null = null;
+  const roleNow = async (): Promise<Role | null> => role ?? (await api.profile()).staff?.role ?? null;
 
-  const base: Api = {
+  // A site lead's view of families: the roster rows, the guardians' names and mobiles, and the children with
+  // their active enrollments. Row-level security limits each query to the lead's site.
+  async function rosterFamilies(id?: string): Promise<Family[]> {
+    let fq = sb.from("roster_families").select("id, name, site_id, status").order("name");
+    if (id) fq = fq.eq("id", id);
+    const { data: fams, error } = await fq;
+    fail(error);
+    if (!fams?.length) return [];
+    let gq = sb.from("roster_guardians").select("id, family_id, name, mobile, is_primary");
+    let cq = sb.from("children").select(CHILD_SELECT);
+    if (id) { gq = gq.eq("family_id", id); cq = cq.eq("family_id", id); }
+    const [{ data: gs, error: e2 }, { data: kids, error: e3 }] = await Promise.all([gq, cq]);
+    fail(e2); fail(e3);
+    return fams.map((f: any) => shapeFamily({
+      ...f,
+      guardians: (gs ?? []).filter((g: any) => g.family_id === f.id).map((g: any) => ({ ...g, email: null })),
+      children: (kids ?? []).filter((c: any) => c.family_id === f.id),
+      agreements: [],
+    }));
+  }
+
+  const api: Api = {
     mock: false,
     async profile() {
       const { data, error } = await sb.rpc("my_profile");
       fail(error);
-      return { staff: data?.staff ?? null, aal: data?.aal ?? null };
+      role = data?.staff?.role ?? null;
+      // Set by staff-signin on a temporary password; cleared when the person picks their own.
+      const { data: { session } } = await sb.auth.getSession();
+      return { staff: data?.staff ?? null, aal: data?.aal ?? null, must_change_password: session?.user?.app_metadata?.must_change_password === true };
     },
     async sites() { const { data, error } = await sb.from("sites").select("*").order("name"); fail(error); return data ?? []; },
     async programs() { const { data, error } = await sb.from("programs").select("*").eq("active", true).order("weekday").order("start_time"); fail(error); return data ?? []; },
     async families() {
+      if ((await roleNow()) === "site_lead") return rosterFamilies();
       const { data, error } = await sb.from("families").select(FAMILY_SELECT).order("name");
       fail(error);
       return (data ?? []).map(shapeFamily);
     },
     async family(id) {
+      if ((await roleNow()) === "site_lead") return (await rosterFamilies(id))[0] ?? null;
       const { data, error } = await sb.from("families").select(FAMILY_SELECT).eq("id", id).maybeSingle();
       fail(error);
       return data ? shapeFamily(data) : null;
@@ -263,26 +288,18 @@ export function supabaseApi(): Api {
       }
     },
     staffSignin: (staffId, action) => callFunction("staff-signin", { staff_id: staffId, action }),
-    async changePassword(newPassword) { const { error } = await sb.auth.updateUser({ password: newPassword }); fail(error); },
+    async changePassword(newPassword) {
+      // The staff-signin function sets it (service role) and clears must_change_password; a fresh token then
+      // carries the cleared flag.
+      await callFunction("staff-signin", { action: "password_changed", new_password: newPassword });
+      const { error } = await sb.auth.refreshSession();
+      fail(error);
+    },
     async auditRecent() {
       const { data, error } = await sb.from("audit_log").select("id, at, actor_email, action, entity, entity_id, reason").order("at", { ascending: false }).limit(40);
       fail(error);
       return data ?? [];
     },
-    kajabiStatus: () => callFunction("kajabi-sync", { action: "status" }),
-    kajabiSync: () => callFunction("kajabi-sync", { action: "sync" }),
   };
-
-  // The changes that can open or close hub access nudge the sync.
-  return {
-    ...base,
-    saveFamily: (f) => andNudge(base.saveFamily(f)),
-    saveGuardian: (g) => andNudge(base.saveGuardian(g)),
-    removeGuardian: (id) => andNudge(base.removeGuardian(id)),
-    saveChild: (c) => andNudge(base.saveChild(c)),
-    saveEnrollment: (e) => andNudge(base.saveEnrollment(e)),
-    removeEnrollment: (id) => andNudge(base.removeEnrollment(id)),
-    addStaff: (s) => andNudge(base.addStaff(s)),
-    setStaffActive: (id, active) => andNudge(base.setStaffActive(id, active)),
-  };
+  return api;
 }

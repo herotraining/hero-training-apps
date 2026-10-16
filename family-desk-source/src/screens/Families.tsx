@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
-import type { Family, Site, Staff } from "../types";
+import type { Family, PayMethod, Site, Staff } from "../types";
 import { Band, ErrorBox, Loading, Tag } from "../ui";
 import { href } from "../router";
 import { siteName } from "../lib/util";
 import { FamilyDialog } from "./FamilyEdit";
 
-const PAY: Record<Family["pay_method"], [string, "esa" | "gold" | undefined]> = { esa: ["ESA", "esa"], private: ["Card or bank", undefined], split: ["ESA and card", "gold"] };
+const PAY: Record<PayMethod, [string, "esa" | "gold" | undefined]> = { esa: ["ESA", "esa"], private: ["Card or bank", undefined], split: ["ESA and card", "gold"] };
 
 export function Families({ staff }: { staff: Staff }) {
   const [fams, setFams] = useState<Family[] | null>(null);
@@ -61,7 +61,8 @@ export function Families({ staff }: { staff: Staff }) {
           {fams && (
             <ul className="list" style={{ marginTop: 14 }}>
               {rows.map((f) => {
-                const [label, kind] = PAY[f.pay_method];
+                // A site lead's roster view carries no pay method, so no tag for it.
+                const pay = f.pay_method ? PAY[f.pay_method] : null;
                 const kids = (f.children ?? []).filter((c) => c.active || f.status === "left").map((c) => c.first_name);
                 const waits = (f.children ?? []).some((c) => (c.enrollments ?? []).some((e) => e.status === "waitlist"));
                 return (
@@ -69,7 +70,7 @@ export function Families({ staff }: { staff: Staff }) {
                     <a className="item" href={href.family(f.id)}>
                       <span className="n">{f.name}</span>
                       <span className="k">{kids.length ? kids.join(" and ") : "No children yet"} · {siteName(f.site_id)}</span>
-                      <span className="p">{f.status === "left" ? <Tag kind="warn">Inactive</Tag> : <>{waits && <Tag>Waitlist</Tag>}<Tag kind={kind}>{label}</Tag></>}</span>
+                      <span className="p">{f.status === "left" ? <Tag kind="warn">Inactive</Tag> : <>{waits && <Tag>Waitlist</Tag>}{pay && <Tag kind={pay[1]}>{pay[0]}</Tag>}</>}</span>
                     </a>
                   </li>
                 );

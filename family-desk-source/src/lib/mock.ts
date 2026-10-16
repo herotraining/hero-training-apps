@@ -307,10 +307,8 @@ export function mockApi(): Api {
     async setStaffActive(id, active) { staff = staff.map((s) => (s.id === id ? { ...s, active } : s)); },
     async coachAssignments() { return assignments; },
     async setCoachAssignments(staffId, programIds) { assignments = [...assignments.filter((a) => a.staff_id !== staffId), ...programIds.map((program_id) => ({ staff_id: staffId, program_id }))]; },
-    async staffSignin(staffId, action) { if (action === "reset_2fa") return { ok: true, removed: 1 }; const st = staff.find((x) => x.id === staffId)!; if (action === "create") staff = staff.map((x) => (x.id === staffId ? { ...x, user_id: "u-" + x.id } : x)); return { ok: true, email: st.email, password: "maple-harbor-comet-42" }; },
+    async staffSignin(staffId, action) { if (action === "reset_2fa") return { ok: true, removed: 1 }; const st = staff.find((x) => x.id === staffId)!; if (action === "create") staff = staff.map((x) => (x.id === staffId ? { ...x, user_id: "u-" + x.id } : x)); return { ok: true, email: st.email, password: "k7mq-x2vd-h4rp-9nz3" }; },
     async changePassword() { await sleep(100); },
-    async kajabiStatus() { await sleep(80); return { configured: true, counts: { family: 6, staff: 3, errors: 0 }, to_grant: 2, to_revoke: 0 }; },
-    async kajabiSync() { await sleep(300); return { ok: true, granted: ["test.family.g@example.com", "zoe@example.com"], revoked: [], failed: [], remaining: 0 }; },
     async auditRecent() { return [{ id: 1, at: new Date().toISOString(), actor_email: "lisa@example.com", action: "update", entity: "esa_invoices", entity_id: "id", reason: "ClassWallet deposit seen in bank" }]; },
   };
 }

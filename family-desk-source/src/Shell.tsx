@@ -8,7 +8,7 @@ import { siteName } from "./lib/util";
 
 const ROLE_WORDS: Record<Staff["role"], string> = { owner: "Owner", admin: "Admin", site_lead: "Site lead", coach: "Coach" };
 
-export function Shell({ staff, route, onSignOut, mock, children }: { staff: Staff; route: Route; onSignOut: () => void; mock: boolean; children: ReactNode }) {
+export function Shell({ staff, route, onSignOut, mock, mustChangePassword, onPasswordChanged, children }: { staff: Staff; route: Route; onSignOut: () => void; mock: boolean; mustChangePassword?: boolean; onPasswordChanged?: () => void; children: ReactNode }) {
   const isCoach = staff.role === "coach";
   const canMoney = staff.role === "owner" || staff.role === "admin";
   const items: { key: Route["name"] | "family"; label: string; to: string; icon: ReactNode; show: boolean }[] = [
@@ -29,9 +29,35 @@ export function Shell({ staff, route, onSignOut, mock, children }: { staff: Staf
     e.preventDefault();
     const pw = String(new FormData(e.currentTarget).get("password") ?? "");
     setBusy(true); setError(null);
-    try { const a = await api(); await a.changePassword(pw); setChanging(false); show("Password changed."); }
+    try { const a = await api(); await a.changePassword(pw); setChanging(false); show("Password changed."); onPasswordChanged?.(); }
     catch (err) { setError((err as Error).message); }
     finally { setBusy(false); }
+  }
+  const passwordField = (
+    <>
+      <div className="field" style={{ marginTop: 12 }}><label htmlFor="newpw">New password</label><input id="newpw" name="password" type="password" autoComplete="new-password" minLength={10} required /></div>
+      <p className="hint">At least 10 characters. A short sentence you'll remember works well.</p>
+      <ErrorBox error={error} />
+    </>
+  );
+  // Signed in with a temporary password: nothing else until they have chosen their own.
+  if (mustChangePassword) {
+    return (
+      <div className="auth">
+        <div className="card">
+          <div className="mark">{Icon.star}<div><b>HERO</b><span>Family Desk</span></div></div>
+          <form onSubmit={onChange}>
+            <h2 style={{ marginBottom: 6 }}>Choose your own password</h2>
+            <p className="hint">Hi {staff.name.split(" ")[0]}. You signed in with a temporary password; pick your own to carry on.</p>
+            {passwordField}
+            <div className="row between" style={{ marginTop: 16 }}>
+              <button type="button" className="back" style={{ margin: 0 }} onClick={onSignOut}>Sign out</button>
+              <button className="btn" disabled={busy}>Save and continue</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
   }
   const who = (
     <div className="who"><b>{staff.name}</b><span>{ROLE_WORDS[staff.role]}{staff.site_id ? `, ${siteName(staff.site_id)}` : ""}{mock ? " (demo data)" : ""}</span>
@@ -60,9 +86,7 @@ export function Shell({ staff, route, onSignOut, mock, children }: { staff: Staf
       <Dialog open={changing} onClose={() => setChanging(false)}>
         <form onSubmit={onChange}>
           <h2>Change your password</h2>
-          <div className="field" style={{ marginTop: 12 }}><label htmlFor="newpw">New password</label><input id="newpw" name="password" type="password" autoComplete="new-password" minLength={10} required /></div>
-          <p className="hint">At least 10 characters. A short sentence you'll remember works well.</p>
-          <ErrorBox error={error} />
+          {passwordField}
           <div className="row end" style={{ marginTop: 16 }}><button type="button" className="btn quiet" onClick={() => setChanging(false)}>Cancel</button><button className="btn" disabled={busy}>Save</button></div>
         </form>
       </Dialog>

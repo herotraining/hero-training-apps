@@ -1,5 +1,5 @@
 // One data layer with two backs: Supabase for real use, built-in made-up data when VITE_MOCK=1.
-import type { JackrabbitLine, Attendance, CareInput, ChargeResult, CheckoutState, Child, ChildInput, ClassWalletDeposit, Closure, ClosureInput, EnrollmentInput, EsaInvoice, Family, FamilyInput, FeedItem, GuardianInput, KajabiStatus, KajabiSyncResult, NewSale, Program, ProgramInput, Profile, RosterRow, Site, Staff, StoreConfig, StoreItem, StoreItemInput, StoreSale, StripePicture, TrainerPay, UniformAsk, UniformLookup, UniformRequest } from "../types";
+import type { JackrabbitLine, Attendance, CareInput, ChargeResult, CheckoutState, Child, ChildInput, ClassWalletDeposit, Closure, ClosureInput, EnrollmentInput, EsaInvoice, Family, FamilyInput, FeedItem, GuardianInput, NewSale, Program, ProgramInput, Profile, RosterRow, Site, Staff, StoreConfig, StoreItem, StoreItemInput, StoreSale, StripePicture, TrainerPay, UniformAsk, UniformLookup, UniformRequest } from "../types";
 
 export interface Api {
   mock: boolean;
@@ -50,7 +50,7 @@ export interface Api {
   setHandedOut(lineId: string, handed: boolean): Promise<void>;
   /** Charge the family's card on file for a cart; the sale is recorded paid, or voided with the reason. */
   chargeCard(s: NewSale): Promise<ChargeResult>;
-  /** Uniform requests from the Family Hub, newest last; open ones first. */
+  /** Uniform requests from the request page on hero.training, newest last; open ones first. */
   uniformRequests(): Promise<UniformRequest[]>;
   closeRequests(ids: string[], status: "fulfilled" | "canceled", saleId: string | null, note: string | null): Promise<void>;
   /** The public request page (no sign-in): what an email and a child's first name unlock, and sending the request. */
@@ -62,9 +62,7 @@ export interface Api {
   coachAssignments(): Promise<{ staff_id: string; program_id: string }[]>;
   setCoachAssignments(staffId: string, programIds: string[]): Promise<void>;
   staffSignin(staffId: string, action: "create" | "reset" | "reset_2fa"): Promise<{ ok: boolean; email?: string; password?: string; removed?: number }>;
-  /** Kajabi hubs: what's granted and what a sync would change; run the sync (owners and admins). */
-  kajabiStatus(): Promise<KajabiStatus>;
-  kajabiSync(): Promise<KajabiSyncResult>;
+  /** The signed-in person's own password; also clears "must change password" after a temporary one. */
   changePassword(newPassword: string): Promise<void>;
   auditRecent(): Promise<{ id: number; at: string; actor_email: string | null; action: string; entity: string; entity_id: string | null; reason: string | null }[]>;
 }

@@ -1,18 +1,20 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
-import { AGREEMENT_KINDS, type Child, type Enrollment, type EsaInvoice, type Family as Fam, type Guardian, type JackrabbitLine, type Program, type Site, type Staff, type StripePicture } from "../types";
+import { AGREEMENT_KINDS, type Child, type Enrollment, type EsaInvoice, type Family as Fam, type Guardian, type JackrabbitLine, type PayMethod, type Program, type Site, type Staff, type StripePicture } from "../types";
 import { ageWords, dateWords, ESA_LABEL, money, monthWords, unixWords, WEEKDAYS, timeWords, siteName } from "../lib/util";
 import { Band, Dialog, ErrorBox, Loading, Tag, Toast, useToast } from "../ui";
 import { href } from "../router";
 import { CareDialog, ChildDialog, EnrollDialog, FamilyDialog, GuardianDialog, STATUS_WORDS } from "./FamilyEdit";
 
 const AGREEMENT: Record<string, string> = { waiver: "Waiver", photo_release: "Photo release", policies: "Policies" };
-const PAYWORDS: Record<Fam["pay_method"], string> = { esa: "Arizona ESA", private: "Card or bank", split: "ESA for co-op, card for classes" };
+const PAYWORDS: Record<PayMethod, string> = { esa: "Arizona ESA", private: "Card or bank", split: "ESA for co-op, card for classes" };
 
 type Open =
   | { kind: "family" } | { kind: "guardian"; guardian: Guardian | null } | { kind: "child"; child: Child | null }
   | { kind: "care"; child: Child } | { kind: "enroll"; child: Child; enrollment: Enrollment | null } | { kind: "sign"; agreement: string } | null;
 
+// Owners and admins see the whole family. A site lead gets the roster view (name, status, guardians' names and
+// mobiles, children and their active classes), so the pay method, agreements, notes and money stay hidden here.
 export function Family({ id, staff }: { id: string; staff: Staff }) {
   const [fam, setFam] = useState<Fam | null | undefined>(undefined);
   const [invoices, setInvoices] = useState<EsaInvoice[]>([]);
@@ -99,7 +101,7 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
           {primary ? `${primary.name}${primary.mobile ? `, ${primary.mobile}` : ""}${primary.email ? `, ${primary.email}` : ""}` : "No parent or guardian on file"}
           {others.length ? ` · also ${others.map((g) => g.name).join(", ")}` : ""}
         </p>
-        <div className="row"><Tag kind={fam.pay_method === "esa" ? "esa" : fam.pay_method === "split" ? "gold" : undefined}>{PAYWORDS[fam.pay_method]}</Tag><span className="contact">{siteName(fam.site_id)}{fam.city && fam.city.toLowerCase() !== siteName(fam.site_id).toLowerCase() ? `, lives in ${fam.city}` : ""}{fam.text_consent ? " · okay to text" : " · no texts"}</span></div>
+        <div className="row">{fam.pay_method && <Tag kind={fam.pay_method === "esa" ? "esa" : fam.pay_method === "split" ? "gold" : undefined}>{PAYWORDS[fam.pay_method]}</Tag>}<span className="contact">{siteName(fam.site_id)}{fam.city && fam.city.toLowerCase() !== siteName(fam.site_id).toLowerCase() ? `, lives in ${fam.city}` : ""}{fam.text_consent === undefined ? "" : fam.text_consent ? " · okay to text" : " · no texts"}</span></div>
         {canEdit && <div className="row" style={{ marginTop: 6 }}><button className="btn quiet small" onClick={() => setOpen({ kind: "family" })}>{fam.status === "left" ? "Edit family / make active" : "Edit family"}</button><button className="btn quiet small" onClick={() => setOpen({ kind: "child", child: null })}>Add a child</button><a className="btn quiet small" href={href.storeFor(fam.id)}>Sell a uniform</a></div>}
         {fam.status === "left" && <p className="contact" style={{ marginTop: 8 }}>Coming back? Set the status to Active under Edit family, then tick each returning child's "Active" box and enroll them.</p>}
       </Band>
@@ -175,7 +177,7 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
           </div>
         </div>
 
-        <div className="section">
+        {canMoney && <div className="section">
           <h2>Agreements</h2>
           <div className="pane">
             {!agreementsRecorded && <p className="hint" style={{ marginBottom: 8 }}>Not recorded in Family Desk yet; Jackrabbit still holds this family's signed forms. Mark each one here as you confirm it.</p>}
@@ -188,7 +190,7 @@ export function Family({ id, staff }: { id: string; staff: Staff }) {
               </div>
             ))}
           </div>
-        </div>
+        </div>}
 
         {canMoney && (
           <div className="section">

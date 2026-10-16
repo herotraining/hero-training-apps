@@ -18,7 +18,7 @@ export const newId = (prefix = "row") => `${prefix}-${++seq}`;
 export class FakeDb {
   tables: Record<string, Row[]> = {
     sites: [], families: [], guardians: [], children: [], programs: [], enrollments: [], staff: [],
-    esa_invoices: [], store_items: [], store_sales: [], store_sale_lines: [], classwallet_deposits: [], uniform_requests: [], kajabi_access: [],
+    esa_invoices: [], store_items: [], store_sales: [], store_sale_lines: [], classwallet_deposits: [], uniform_requests: [],
   };
   profile: Profile = { staff: { id: "staff-owner", role: "owner" }, aal: "aal2" };
   calls: { table: string; op: string; filters: Filter[]; payload?: any; trusted: boolean }[] = [];

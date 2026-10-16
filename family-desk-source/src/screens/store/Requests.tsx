@@ -1,4 +1,4 @@
-// Uniform requests from the Family Hub: what's waiting (counted by shirt, color and size so an order can be
+// Uniform requests from the request page on hero.training: what's waiting (counted by shirt, color and size so an order can be
 // placed), each family's lines, and the fill step that bills the family the way they already pay.
 import { useMemo, useState, type FormEvent } from "react";
 import { api } from "../../lib/api";
@@ -86,7 +86,7 @@ function FillDialog({ group: g, items, siteId, onClose, onDone, onError, onAddTo
   const route = routeFor(g, lines.every((l) => l.item?.esa_ok));
   const child = g.family?.children?.find((c) => c.id === g.childId);
   const saleLines = () => lines.map((l) => ({ item_id: l.item!.id, size: l.r.size, color: l.r.color, quantity: l.r.quantity, child_id: g.childId, unit_cents: l.item!.price_cents }));
-  const sale = (pay: NewSale["pay"]): NewSale => ({ site_id: g.family?.site_id ?? siteId, family_id: g.familyId, pay, note: "Uniform request from the Family Hub", lines: saleLines() });
+  const sale = (pay: NewSale["pay"]): NewSale => ({ site_id: g.family?.site_id ?? siteId, family_id: g.familyId, pay, note: "Uniform request from hero.training", lines: saleLines() });
   const ids = g.requests.map((r) => r.id);
 
   async function fill() {

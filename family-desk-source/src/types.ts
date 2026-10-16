@@ -83,17 +83,19 @@ export interface Child {
 
 export interface Agreement { id: string; kind: string; signed_at: string | null; signed_by: string | null }
 
+// A site lead gets the roster view of a family (id, name, site, status, guardians' names and mobiles, children):
+// the fields marked optional are absent for them, and guardians' emails are null.
 export interface Family {
   id: string;
   name: string;
   site_id: string;
-  pay_method: PayMethod;
-  stripe_customer_id: string | null;
+  pay_method?: PayMethod;
+  stripe_customer_id?: string | null;
   address_line1?: string | null;
-  city: string | null;
-  zip: string | null;
-  text_consent: boolean;
-  notes: string | null;
+  city?: string | null;
+  zip?: string | null;
+  text_consent?: boolean;
+  notes?: string | null;
   status: string;
   guardians?: Guardian[];
   children?: Child[];
@@ -213,7 +215,7 @@ export interface StoreConfig { card: "off" | "practice" | "live"; why?: string }
 // A card-on-file charge for a cart (filling a uniform request).
 export interface ChargeResult { sale_id: string; status: string; amount: number; live: boolean; last4: string | null; brand: string | null }
 
-// A uniform a parent asked for from the Family Hub, waiting for staff to fill and bill it.
+// A uniform a parent asked for from the request page on hero.training, waiting for staff to fill and bill it.
 export type RequestStatus = "new" | "fulfilled" | "canceled";
 export interface UniformRequest {
   id: string; family_id: string; child_id: string; item_id: string | null; item_name: string; size: string | null; color: string | null;
@@ -240,8 +242,5 @@ export interface StripePicture {
 
 export interface RosterRow { child: Child; enrollment: Enrollment; family?: Family }
 
-// Kajabi hubs: who has access, and what a sync would change.
-export interface KajabiStatus { configured: boolean; counts: { family: number; staff: number; errors: number }; to_grant: number; to_revoke: number }
-export interface KajabiSyncResult { ok: boolean; granted: string[]; revoked: string[]; failed: { email: string; why: string }[]; remaining: number }
-
-export interface Profile { staff: Staff | null; aal: "aal1" | "aal2" | null }
+// must_change_password: the person signed in with a temporary password and has to pick their own before anything else.
+export interface Profile { staff: Staff | null; aal: "aal1" | "aal2" | null; must_change_password?: boolean }

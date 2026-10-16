@@ -165,7 +165,7 @@ export function Money() {
 
       <Dialog open={creating} onClose={() => setCreating(false)}>
         <h2>Create ESA invoices</h2>
-        <p className="hint">One invoice per ESA child for the class month you pick, with every ESA class they're in and any uniforms bought on ESA at the store. Children who already have one are skipped. Nothing is emailed; families see their invoice in the Family Hub.</p>
+        <p className="hint">One invoice per ESA child for the class month you pick, with every ESA class they're in and any uniforms bought on ESA at the store. Children who already have one are skipped. Nothing is emailed from Family Desk.</p>
         <div className="field" style={{ marginTop: 12 }}><label htmlFor="month">Class month</label>
           <select id="month" value={month} onChange={(e) => setMonth(e.target.value)}>{nextMonths().map((m) => <option key={m} value={m}>{monthWords(m)}</option>)}</select>
         </div>

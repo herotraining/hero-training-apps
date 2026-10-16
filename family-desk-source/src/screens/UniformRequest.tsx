@@ -1,4 +1,4 @@
-// The one page parents see: request a uniform for a child in a class. Linked from the Family Hub on hero.training.
+// The one page parents see: request a uniform for a child in a class. Linked from hero.training.
 // No sign-in: the email on file and the child's first name unlock that child, and the request lands in Family Desk
 // for staff to fill and bill the way the family already pays.
 import { useState, type FormEvent } from "react";

@@ -7,7 +7,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { cors, json, userClient, stripe, stripeKey } from "./_shared.ts";
 
-const PAID_URL = Deno.env.get("STORE_PAID_URL") || "https://app.hero.training/family-desk/paid.html";   // hero.training/paid.html once the site moves
+const PAID_URL = Deno.env.get("STORE_PAID_URL") || "https://hero.training/paid.html";
 
 // The store has its own Stripe key, so it can take real card payments while the rest of Family Desk stays in the
 // sandbox. Without one it borrows the sandbox key and every payment is practice. A live key also needs

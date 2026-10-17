@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "shots": "node scripts/shots.mjs",
     "build:pages": "vite build --base /family-desk/ --outDir ../family-desk --emptyOutDir",
+    "build:root": "vite build --base / --outDir dist --emptyOutDir",
     "test": "vitest run"
   },
   "dependencies": {
